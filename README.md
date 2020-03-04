@@ -56,10 +56,10 @@ optional arguments:
 `$ cli-spectrogram --sample-rate 38400 --file-length 1 --source ./examples `
 ![](/images/default.png?raw=true "Default view")
 
-`$ cli-spectrogram --sample-rate 38400 --file-length 1 --source ./examples --markfreq-hz 5000 --threshold-db 60`
+`$ cli-spectrogram --sample-rate 38400 --file-length 1 --source ./examples --markfreq-hz 2000 --threshold-db 80`
 ![](/images/basic.png?raw=true "With threshold passed and mark frequency passed")
 
-`$ cli-spectrogram --sample-rate 38400 --file-length 1 --source ./examples --markfreq-hz 5000 --threshold-db 60 --threshold-steps 2 `
+`$ cli-spectrogram --sample-rate 38400 --file-length 1 --source ./examples --markfreq-hz 2000 --threshold-db 80 --threshold-steps 20 `
 ![](/images/thresh_tolerance.png?raw=true "With threshold passed and mark frequency passed and threshold steps")
 
 
