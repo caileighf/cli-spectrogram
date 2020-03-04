@@ -1,5 +1,5 @@
-# cli-spectrogram
-## Command Line Interface Spectrogram
+# Command Line Interface Spectrogram
+## cli-spectrogram
 Simple python module that creates spectrograms in the command line.
 
 ### Purpose
