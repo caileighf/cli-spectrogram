@@ -98,7 +98,8 @@ Threshold (dB): Current threshold. | Mode: Streaming OR Navigation | up / down K
 Sample Rate (Hz): Sample rate of collected data. | Color bar for spectrogram | left / right Keys to adjust the frequency marker
 Viewing same file: if True, the spectrogram is being re-rendered from the same file. if False, then the spectrogram on display is a new render. | lower bound dB - upper bount dB | pg up/pg down view next file/view prev file
 file: name of the file that is being rendered. | | ESC Exit navigation mode
-refresh count: The heartbeat of the app. | | F/f toggle full screen
+time: time the file was created/last modified converted to local time | | F/f toggle full screen
+refresh count: The heartbeat of the app. | |
 
 __Errors and fail states__
 
