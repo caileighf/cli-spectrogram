@@ -12,7 +12,7 @@
 #
 # File: cli_spectrogram.py
 #
-from common import min_width, min_height, ESC, unix_epoch_to_local, config_curses
+from common import default_console_height, menu_column_buffer, menu_row_buffer, extra_column_buffer, ESC, unix_epoch_to_local, config_curses
 from specgram import Specgram
 from ui import Ui
 import os
@@ -31,18 +31,31 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
         exit(2)
 
     stdscr, curses = config_curses()   
+    # setup dimensions for window
+    columns_of_data = int(nfft/2)
+    min_width = columns_of_data+extra_column_buffer
+    # make sure window is wide enough to fit the menu
+    if min_width < menu_column_buffer:
+        min_width=menu_column_buffer
+
+    min_height = default_console_height
+    max_rows_specgram = min_height-menu_row_buffer
+    max_rows_specgram_no_menu = min_height-3
+
     # create Ui object
-    ui = Ui(min_width, min_height, time.time(), curses.color_pair)
+    ui = Ui(min_width, min_height, time.time(), curses.color_pair, max_rows_specgram, max_rows_specgram_no_menu)
     # create specgram object 
     specgram = Specgram(sample_rate, file_length_sec, display_channel, scale='dB', threshdb=threshold_db, threshdb_steps=threshold_steps, markfreq=markfreq_hz, nfft=nfft, max_lines=ui.specgram_max_lines, color_pair=curses.color_pair)
+
     # now dow stuff
     try:
         count=0
         latest_file = ui.get_file(stdscr, source)
         previous_file = latest_file
         is_dup = True 
+        # setup the ui with the curses window and specgram object
+        stdscr, specgram = ui.spin(stdscr, specgram)
         while True:
-            ui.spin(stdscr, specgram) # needs to happen every iteration (handles key strokes and window resize)
             latest_file = ui.get_file(stdscr, source)
             # 
             # if DAQ isn't running, new files aren't being added to the log dir
@@ -61,10 +74,14 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
             specgram.parse_file(latest_file)
             # clear curses window
             stdscr.erase()
-            # display the specgram
-            specgram.display(stdscr)
-            # display Ui elements (legend and intensity bar)
-            ui.update(stdscr, specgram, is_dup, count)
+            try:
+                specgram.display(stdscr)
+                ui.update(stdscr, specgram, is_dup, count)
+                # spin ui will display menu and handle user inputs
+                stdscr, specgram = ui.spin(stdscr, specgram)
+            except curses.error as err: 
+                ui.hard_reset(stdscr, specgram, max_rows_specgram, max_rows_specgram_no_menu)
+
             # draw everything in the buffer 
             stdscr.refresh()
             count+=1

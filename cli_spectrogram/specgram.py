@@ -12,14 +12,8 @@
 #
 # File: specgram.py
 #
-from common import min_width, min_height, ESC, unix_epoch_to_local, max_rows_specgram_no_menu, max_rows_specgram
-import os
 import numpy
 import math
-import argparse
-import pathlib
-import glob
-import time
 import curses
 
 class Specgram(object):
@@ -86,13 +80,6 @@ class Specgram(object):
             if start > (self.sample_rate*self.file_length_sec)-self.nfft:
                 atend=True
 
-        if self.calc_line_mod:
-            self.lines_of_data = len(strvec)
-            while self.lines_of_data/self.line_mod > self.max_lines:
-                self.line_mod+=1
-
-            self.calc_line_mod=False
-
         return (indvec, strvec)
 
     def add_intensity_bar(self, window, y,x):
@@ -108,7 +95,7 @@ class Specgram(object):
         return(y+3,x)
 
     def display(self, stdscr):
-        if len(self.data) <= 0: # this is extra backup but is handled in the Ui
+        if len(self.data) <= 0:
             stdscr.addstr('parse data from file first!')
             return
         # take fft of the channel data:
@@ -138,12 +125,24 @@ class Specgram(object):
                 fbord = fbord+str(round(self.markfreq, 3)) +'Hz'
                 gotf=True
                 strbord=strbord+'|'
+
         stdscr.addstr('time [s]')
         stdscr.addstr(fbord[1:] + '\n', curses.A_BOLD)
         stdscr.addstr('       ' +  strbord + '\n')
         ms_vec = list(int(float(x)/self.sample_rate*1000) for x in indvec)
 
-        self.max_lines=len(strout)
+        #
+        # if window was resized we need to recalculate the line mod
+        #
+        if self.calc_line_mod:
+            self.lines_of_data=len(strout)
+            self.line_mod=1
+            while self.lines_of_data/self.line_mod > self.max_lines:
+                self.line_mod+=1
+            self.calc_line_mod=False
+        #
+        # Display colors
+        #
         for i, stro in enumerate(strout):
             if i%self.line_mod==0:
                 line = ('0.' + str(ms_vec[ii]).zfill(3) + '| ')

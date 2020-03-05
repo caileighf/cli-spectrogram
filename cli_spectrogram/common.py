@@ -15,10 +15,10 @@
 import time
 import curses
 
-min_width=110
-min_height=53
-max_rows_specgram=43
-max_rows_specgram_no_menu=52
+extra_column_buffer=10 # need buffer of 10 columns for axis labels
+menu_row_buffer=13     # menu takes up 13 rows
+menu_column_buffer=110 # menu takes up about 110 columns
+default_console_height=53 # resonable to expect 53 char height for console
 ESC=27
 ZOOM_IN=43  # +
 ZOOM_OUT=45 # -
