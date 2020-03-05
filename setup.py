@@ -12,7 +12,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/caileighf/cli-spectrogram",
-    download_url="https://github.com/caileighf/cli-spectrogram/archive/0.0.1.tar.gz",
+    download_url="https://github.com/caileighf/cli-spectrogram/archive/0.1.tar.gz",
     install_requires=['numpy', 'pathlib'],
     packages=setuptools.find_packages(),
     classifiers=[
