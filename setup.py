@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cli-spectrogram", 
-    version="0.0.1",
+    version="0.1",
     author="Caileigh Fitzgerald",
     author_email="cfitzgerald@whoi.edu",
     description="Simple python module that creates spectrograms in the command line",
