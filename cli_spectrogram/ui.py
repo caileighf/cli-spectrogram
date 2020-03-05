@@ -181,7 +181,10 @@ class Ui(object):
         window.addstr('\n file: ')
         window.addstr(str(self.current_file.stem+'.txt'), curses.A_BOLD)
         window.addstr('\n time: ')
-        window.addstr(str(unix_epoch_to_local(float(self.current_file.stem)))) # time file was created or last modified
+        try:
+            window.addstr(str(unix_epoch_to_local(float(self.current_file.stem)))) # time file was created or last modified
+        except:
+            pass
         window.addstr('\n -----------------------------')
         window.addstr('\n refresh count: %s'%(str(count)))
         # window.addstr('\n Key ID: ')

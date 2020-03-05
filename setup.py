@@ -5,14 +5,14 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="cli-spectrogram", 
-    version="0.2.3",
+    version="1.0.0",
     author="Caileigh Fitzgerald",
     author_email="cfitzgerald@whoi.edu",
     description="Simple python module that creates spectrograms from multi channel hydrophone array data in the command line.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/caileighf/cli-spectrogram",
-    download_url="https://github.com/caileighf/cli-spectrogram/archive/0.2.3.tar.gz",
+    download_url="https://github.com/caileighf/cli-spectrogram/archive/1.0.0.tar.gz",
     install_requires=['numpy', 'pathlib'],
     packages=setuptools.find_packages(),
     classifiers=[
