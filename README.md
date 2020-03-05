@@ -1,6 +1,6 @@
 # Command Line Interface Spectrogram
 ## cli-spectrogram
-Simple python module that creates spectrograms in the command line.
+Simple python module that creates spectrograms from multi channel hydrophone array data in the command line.
 
 ![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/default.png "Default view")
 
