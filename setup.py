@@ -12,7 +12,8 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/caileighf/cli-spectrogram",
-    install_requires=['numpy==1.13.3', 'pathlib==1.0.1'],
+    download_url="https://github.com/caileighf/cli-spectrogram/archive/0.0.1.tar.gz",
+    install_requires=['numpy', 'pathlib'],
     packages=setuptools.find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
