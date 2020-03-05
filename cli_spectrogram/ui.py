@@ -84,7 +84,7 @@ class Ui(object):
 
         if self.stop_at_file:
             # make sure user doesn't go to last file because it's empty
-            if os.path.getsize(self.current_file) <= 0:
+            if os.path.getsize(str(self.current_file)) <= 0:
                 self.reset_nav()
                 self.current_file=files[-2]
             return(self.current_file)
@@ -181,8 +181,7 @@ class Ui(object):
         window.addstr('\n file: ')
         window.addstr(str(self.current_file.stem+'.txt'), curses.A_BOLD)
         window.addstr('\n time: ')
-        stat = os.stat(self.current_file)
-        window.addstr(str(unix_epoch_to_local(stat.st_mtime))) # time file was created or last modified
+        window.addstr(str(unix_epoch_to_local(float(self.current_file.stem)))) # time file was created or last modified
         window.addstr('\n -----------------------------')
         window.addstr('\n refresh count: %s'%(str(count)))
         # window.addstr('\n Key ID: ')

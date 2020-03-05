@@ -24,7 +24,7 @@ import glob
 import time
 import curses
 
-def main(source, sample_rate, file_length_sec, debug, display_channel, threshold_db, markfreq_hz, threshold_steps, nfft):
+def run_cli(source, sample_rate, file_length_sec, debug, display_channel, threshold_db, markfreq_hz, threshold_steps, nfft):
     log_dir = source
     if not os.path.isdir(log_dir):
         print('Must provide valid log directory! source=%s'%str(log_dir))
@@ -79,7 +79,7 @@ def main(source, sample_rate, file_length_sec, debug, display_channel, threshold
         curses.endwin()
 
 
-if __name__ == '__main__':
+def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--sample-rate', help='', required=True, type=float)
     parser.add_argument('--file-length', help='in seconds', required=True, type=int)
@@ -93,7 +93,11 @@ if __name__ == '__main__':
     parser.set_defaults(source=os.getcwd(), display_channel=1, threshold_db=60, markfreq_hz=5000, threshold_steps=5, nfft=200)
     args = parser.parse_args()
 
-    curses.wrapper(main(args.source, args.sample_rate, args.file_length, args.debug, args.display_channel, args.threshold_db, args.markfreq_hz, args.threshold_steps, args.nfft))
+    curses.wrapper(run_cli(args.source, args.sample_rate, args.file_length, args.debug, args.display_channel, args.threshold_db, args.markfreq_hz, args.threshold_steps, args.nfft))
+
+
+if __name__ == '__main__':
+    main()
 
     # Sound levels for nonlinear (decibel) and linear (intensity) scales decibels     
     # ---------------------------------------------------------------------
