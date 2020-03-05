@@ -2,6 +2,8 @@
 ## cli-spectrogram
 Simple python module that creates spectrograms in the command line.
 
+![](/images/default.png?raw=true "Default view")
+
 ### Purpose
 Our group needed a lightweight, command line tool to look at spectrogram data coming from multi channel hydrophone arrays. 
 This was designed for text or binary files created using the uldaq library. _Link to their source code [here](https://github.com/mccdaq/uldaq)._ 
