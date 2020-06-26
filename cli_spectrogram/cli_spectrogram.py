@@ -12,7 +12,7 @@
 #
 # File: cli_spectrogram.py
 #
-from common import default_console_height, menu_column_buffer, menu_row_buffer, extra_column_buffer, ESC, unix_epoch_to_local, config_curses
+from common import ConfigError, voltage_bar_width, default_console_height, menu_column_buffer, menu_row_buffer, extra_column_buffer, ESC, unix_epoch_to_local, config_curses
 from specgram import Specgram
 from ui import Ui
 import os
@@ -33,7 +33,7 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
     stdscr, curses = config_curses()   
     # setup dimensions for window
     columns_of_data = int(nfft/2)
-    min_width = columns_of_data+extra_column_buffer
+    min_width = columns_of_data+extra_column_buffer+voltage_bar_width
     # make sure window is wide enough to fit the menu
     if min_width < menu_column_buffer:
         min_width=menu_column_buffer
@@ -45,7 +45,7 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
     # create Ui object
     ui = Ui(min_width, min_height, time.time(), curses.color_pair, max_rows_specgram, max_rows_specgram_no_menu)
     # create specgram object 
-    specgram = Specgram(sample_rate, file_length_sec, display_channel, scale='dB', threshdb=threshold_db, threshdb_steps=threshold_steps, markfreq=markfreq_hz, nfft=nfft, max_lines=ui.specgram_max_lines, color_pair=curses.color_pair)
+    specgram = Specgram(sample_rate, file_length_sec, display_channel, scale='dB', threshdb=threshold_db, threshdb_steps=threshold_steps, markfreq=markfreq_hz, nfft=nfft, max_lines=ui.specgram_max_lines, color_pair=curses.color_pair, voltage_bar_width=voltage_bar_width)
 
     # now dow stuff
     try:
@@ -53,9 +53,20 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
         latest_file = ui.get_file(stdscr, source)
         previous_file = latest_file
         is_dup = True 
+        current_time = time.time()
+        previous_time = current_time
         # setup the ui with the curses window and specgram object
         stdscr, specgram = ui.spin(stdscr, specgram)
         while True:
+            current_time = time.time()
+            if debug:
+                # start context manager for log file
+                with open('log_{0}.txt'.format(unix_epoch_to_local(time.time(), no_date=True)), 'w+') as log_file:
+                    if (current_time-previous_time)>(file_length_sec*1000):
+                        message = "iteration: {0} time: {1} last iteration happened, {2} seconds ago.\n".format(count, unix_epoch_to_local(current_time), (current_time-previous_time)*0.001)
+                        log_file.write(message)
+                        previous_time = current_time
+
             latest_file = ui.get_file(stdscr, source)
             # 
             # if DAQ isn't running, new files aren't being added to the log dir
@@ -71,11 +82,16 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
             # clear out data list
             specgram.clear()
             # take the file and parse into specgram object
-            specgram.parse_file(latest_file)
+            rc = specgram.parse_file(latest_file)
+            # if rc == None:
+            #     ui.message_buffer.append('Unable to read file...')
+            #     # draw everything in the buffer 
+            #     stdscr.refresh()
+            #     continue
             # clear curses window
             stdscr.erase()
             try:
-                specgram.display(stdscr)
+                specgram.display(stdscr, display_channel)
                 ui.update(stdscr, specgram, is_dup, count)
                 # spin ui will display menu and handle user inputs
                 stdscr, specgram = ui.spin(stdscr, specgram)
@@ -85,10 +101,17 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
             # draw everything in the buffer 
             stdscr.refresh()
             count+=1
+            if count%100==0:
+                ui.message_buffer = []
+                ui.message_buffer.append('CLEARED!')
 
     except KeyboardInterrupt:
         print('\n\tExiting...\n\n')
         exit(1)
+
+    except ConfigError as err:
+        pass
+
     finally:
         curses.nocbreak()
         stdscr.keypad(False)
@@ -99,7 +122,7 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
 def main():
     parser = argparse.ArgumentParser(description='')
     parser.add_argument('--sample-rate', help='', required=True, type=float)
-    parser.add_argument('--file-length', help='in seconds', required=True, type=int)
+    parser.add_argument('--file-length', help='in seconds', required=True, type=float)
     parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
     parser.add_argument('--source', help='Source directory with .txt files', required=False)
     parser.add_argument('--threshold-steps', help='How many dB above and below threshold', required=False, type=int)
@@ -107,7 +130,7 @@ def main():
     parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
     parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
     parser.add_argument('--nfft', help='', required=False, type=int)
-    parser.set_defaults(source=os.getcwd(), display_channel=1, threshold_db=60, markfreq_hz=5000, threshold_steps=5, nfft=200)
+    parser.set_defaults(source=os.getcwd(), display_channel=1, threshold_db=75, markfreq_hz=5000, threshold_steps=5, nfft=300)
     args = parser.parse_args()
 
     curses.wrapper(run_cli(args.source, args.sample_rate, args.file_length, args.debug, args.display_channel, args.threshold_db, args.markfreq_hz, args.threshold_steps, args.nfft))

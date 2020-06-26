@@ -15,15 +15,27 @@
 import time
 import curses
 
+voltage_bar_width=24   # 22 for values and buffer of 1 on each side
 extra_column_buffer=10 # need buffer of 10 columns for axis labels
-menu_row_buffer=13     # menu takes up 13 rows
-menu_column_buffer=110 # menu takes up about 110 columns
+menu_row_buffer=17     # menu takes up 13 rows
+menu_column_buffer=115 # menu takes up about 110 columns
 default_console_height=53 # resonable to expect 53 char height for console
 ESC=27
 ZOOM_IN=43  # +
 ZOOM_OUT=45 # -
+SHIFT_UP=337
+SHIFT_DOWN=336
 
-def unix_epoch_to_local(epoch):
+class ConfigError(Exception):
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+
+
+def unix_epoch_to_local(epoch, no_date=False):
+    if no_date:
+        return(str(time.strftime('%Hhour%Mmin%Ssecond', time.localtime(epoch))))
+
     return(str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(epoch))))
 
 def config_curses():
@@ -39,6 +51,8 @@ def config_curses():
     curses.init_pair(curses.COLOR_RED, curses.COLOR_BLACK, curses.COLOR_RED)
     curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_YELLOW)
     curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(9, curses.COLOR_BLACK, curses.COLOR_WHITE)
+    curses.init_pair(10, curses.COLOR_RED, curses.COLOR_WHITE)
     curses.curs_set(0)
     curses.noecho()
     curses.cbreak()

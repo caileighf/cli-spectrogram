@@ -12,7 +12,7 @@
 #
 # File: ui.py
 #
-from common import menu_row_buffer, extra_column_buffer, ESC, unix_epoch_to_local
+from common import voltage_bar_width, menu_row_buffer, extra_column_buffer, ESC, SHIFT_UP, SHIFT_DOWN, unix_epoch_to_local
 import os
 import numpy
 import math
@@ -22,7 +22,7 @@ import time
 import curses
 
 class Ui(object):
-    def __init__(self, min_width, min_height, current_time, color_pair, max_rows_specgram, max_rows_specgram_no_menu, mode='text'):
+    def __init__(self, min_width, min_height, current_time, color_pair, max_rows_specgram, max_rows_specgram_no_menu, message_buffer_display_limit=3, mode='text'):
         super(Ui, self).__init__()
         self.min_width = min_width
         self.min_height = min_height
@@ -33,6 +33,7 @@ class Ui(object):
         self.stop_at_file = False
         self.current_file = None
         self.hide_menu = False
+        self.hide_debugger = False
         self.specgram_max_lines = max_rows_specgram
         self.specgram_max_lines_no_menu = max_rows_specgram_no_menu
         self.key_id=ESC
@@ -41,6 +42,9 @@ class Ui(object):
         self.current_width=0
         self.current_height=0
         self.num_resets=0
+        self.message_buffer=[]
+        self.message_buffer_display_limit=message_buffer_display_limit
+        self.adjusting_nfft=False
 
     def hard_reset(self, window, specgram, max_rows_specgram, max_rows_specgram_no_menu):
         self.reset_nav()
@@ -50,6 +54,9 @@ class Ui(object):
         specgram.max_lines=self.specgram_max_lines
         # next display will recalc line mod   
         specgram.calc_line_mod=True
+        specgram.show_voltage=False
+        self.show_voltage=False
+        self.hide_debugger=False
         self.num_resets+=1
 
     def reset_nav(self):
@@ -148,6 +155,11 @@ class Ui(object):
         # next display will recalc line mod   
         specgram.calc_line_mod=True
 
+    def toggle(self, state):
+        if state:
+            return False
+        return True
+
     def handle_key_strokes(self, window, specgram):
         self.current_time=time.time()
         while (self.current_time-self.start) <= specgram.file_length_sec:
@@ -158,6 +170,10 @@ class Ui(object):
                 specgram.threshdb+=1
             elif key == curses.KEY_DOWN:
                 specgram.threshdb-=1
+            elif key == SHIFT_UP:
+                specgram.nfft+=10
+            elif key == SHIFT_DOWN:
+                specgram.nfft-=10
             elif key == curses.KEY_RIGHT:
                 specgram.markfreq+=200
             elif key == curses.KEY_LEFT:
@@ -170,6 +186,15 @@ class Ui(object):
                 self.stop_at_file=True
             elif key == ESC:
                 self.reset_nav()
+            elif key == ord('V') or key == ord('v'):
+                if specgram.show_voltage:
+                    self.show_voltage=False
+                    specgram.show_voltage=False
+                    self.min_width-=voltage_bar_width
+                else:
+                    self.show_voltage=True
+                    specgram.show_voltage=True
+                    self.min_width+=voltage_bar_width
             elif key == ord('F') or key == ord('f'):
                 if self.hide_menu:
                     specgram.max_lines=self.specgram_max_lines
@@ -179,8 +204,22 @@ class Ui(object):
                     self.hide_menu=True
                 # next display will recalc line mod   
                 specgram.calc_line_mod=True
-            elif key != -1:
+            elif key == ord('D') or key == ord('d'):
+                self.hide_debugger ^= True # will toggle 
+                # next display will recalc line mod   
+                specgram.calc_line_mod=True
+
+            if key != -1:
                 self.key_id=key
+
+            # next display will recalc line mod   
+            if specgram.nfft > 500: 
+                specgram.nfft = 500
+
+            if specgram.nfft < 10:
+                specgram.nfft = 10
+
+            specgram.calc_line_mod=True
 
             self.current_time=time.time()
         self.start=self.current_time
@@ -214,12 +253,18 @@ class Ui(object):
             pass
         window.addstr('\n -----------------------------')
         window.addstr('\n refresh count: %s'%(str(count)))
-        # window.addstr('\n Key ID: ')
-        # window.addstr(str(self.key_id))
-        # window.addstr('\n Line mod: ')
-        # window.addstr(str(specgram.line_mod))
-        window.addstr('\n rows, max lines: ')
-        window.addstr(str(specgram.lines_of_data) + ', ' + str(specgram.max_lines))
+        self.message_buffer.append('Key ID:   %s'%str(self.key_id))
+        self.message_buffer.append('Line mod: %s'%str(specgram.line_mod))
+        self.message_buffer.append('Rows, Max lines: %s, %s'%(str(specgram.lines_of_data), str(specgram.max_lines)))
+
+        if not self.hide_debugger:
+            window.addstr('\n debugging message buffer', curses.A_BOLD)
+            count=1
+            for i, msg in reversed(list(enumerate(self.message_buffer))):
+                window.addstr('\n [' + str(i) + '] ' + msg)
+                if count==self.message_buffer_display_limit:
+                    break
+                count+=1
 
         window.move(y_row1+1, x_col2) # move to top right corner of col2
         if self.stop_at_file:
@@ -230,11 +275,12 @@ class Ui(object):
         y, x = specgram.add_intensity_bar(window, y_row1+3,x_col2)
 
         window.move(y_row1, x_col3) # move to top right corner of col3
-        window.addstr(y_row1,x_col3,  '[up   | down ] adjust the threshold (dB)')
-        window.addstr(y_row1+1,x_col3,'[left | right] adjust the frequency marker (Hz)')
-        window.addstr(y_row1+2,x_col3,'[pgup | pgdn ] view next file/view prev file')
-        window.addstr(y_row1+3,x_col3,'-------------------------------------')
-        window.addstr(y_row1+4,x_col3,'[ESC] Exit navigation mode and stream')
-        window.addstr(y_row1+5,x_col3,'[F | f] toggle full screen')
-        window.addstr(y_row1+6,x_col3,'-----------------------------')
-        window.addstr(y_row1+7,x_col3,'Hit Ctrl + C to Exit', curses.A_BOLD)
+        window.addstr(y_row1,x_col3,  'up / down       | adjust the threshold (dB)')
+        window.addstr(y_row1+1,x_col3,'left / right    | adjust the frequency marker (Hz)')
+        window.addstr(y_row1+2,x_col3,'pgup / pgdn     | view next file/view prev file')
+        window.addstr(y_row1+3,x_col3,'Shift+(up/down) | adjust NFFT')
+        window.addstr(y_row1+4,x_col3,'-------------------------------------')
+        window.addstr(y_row1+5,x_col3,'[ESC] Exit navigation mode and stream')
+        window.addstr(y_row1+6,x_col3,'[F | f] toggle full screen')
+        window.addstr(y_row1+7,x_col3,'-----------------------------')
+        window.addstr(y_row1+8,x_col3,'Hit Ctrl + C to Exit', curses.A_BOLD)
