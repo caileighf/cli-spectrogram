@@ -68,7 +68,7 @@ class Ui(object):
         if self.mode=='binary':
             return(sorted(pathlib.Path(source).glob('1*.bin')))
         else:
-            return(sorted(pathlib.Path(source).glob('1*.txt')))
+            return(sorted(pathlib.Path(source).glob('*.txt')))
 
     def get_file(self, window, source):
         files = self.get_files(source)
