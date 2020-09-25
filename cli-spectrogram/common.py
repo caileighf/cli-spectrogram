@@ -15,9 +15,9 @@
 import time
 import curses
 
-voltage_bar_width=24   # 22 for values and buffer of 1 on each side
+voltage_bar_width=0   # 22 for values and buffer of 1 on each side
 extra_column_buffer=10 # need buffer of 10 columns for axis labels
-menu_row_buffer=17     # menu takes up 13 rows
+menu_row_buffer=13     # menu takes up 13 rows
 menu_column_buffer=115 # menu takes up about 110 columns
 default_console_height=53 # resonable to expect 53 char height for console
 ESC=27
@@ -31,11 +31,9 @@ class ConfigError(Exception):
         self.key = key
         self.value = value
 
-
 def unix_epoch_to_local(epoch, no_date=False):
     if no_date:
         return(str(time.strftime('%Hhour%Mmin%Ssecond', time.localtime(epoch))))
-
     return(str(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(epoch))))
 
 def config_curses():

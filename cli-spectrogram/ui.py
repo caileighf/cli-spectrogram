@@ -22,7 +22,8 @@ import time
 import curses
 
 class Ui(object):
-    def __init__(self, min_width, min_height, current_time, color_pair, max_rows_specgram, max_rows_specgram_no_menu, message_buffer_display_limit=3, mode='text'):
+    def __init__(self, min_width, min_height, current_time, color_pair, max_rows_specgram, 
+        max_rows_specgram_no_menu, message_buffer_display_limit=3, mode='text', file_length_sec=1):
         super(Ui, self).__init__()
         self.min_width = min_width
         self.min_height = min_height
@@ -45,6 +46,19 @@ class Ui(object):
         self.message_buffer=[]
         self.message_buffer_display_limit=message_buffer_display_limit
         self.adjusting_nfft=False
+        self.skip_minute_fwd = False
+        self.skip_minute_bck = False
+        self.skip_to_beginning = False
+        self.show_we_skipped_to_beginning = False
+        self.file_length_sec = file_length_sec
+        self.files_in_tstep = self.get_num_files_in_min()
+
+    def get_num_files_in_min(self):
+        if self.file_length_sec >= 1:
+            files_in_min = int(60 / self.file_length_sec)
+        else:
+            files_in_min = int(self.file_length_sec * 60)
+        return(files_in_min)
 
     def hard_reset(self, window, specgram, max_rows_specgram, max_rows_specgram_no_menu):
         self.reset_nav()
@@ -63,6 +77,10 @@ class Ui(object):
         self.stop_at_file=False
         self.nav_prev_file=False
         self.nav_next_file=False
+        self.show_we_skipped_to_beginning=False
+        self.skip_minute_fwd = False
+        self.skip_minute_bck = False
+        self.skip_to_beginning = False
 
     def get_files(self, source):
         if self.mode=='binary':
@@ -75,14 +93,32 @@ class Ui(object):
         if len(files) <= 2:
             files = self.handle_no_files(window, source)
         else:
-            if self.stop_at_file and self.current_file is not None:
-                # find position of current file in list
+            if self.skip_to_beginning and self.current_file is not None:
+                self.skip_to_beginning = False
+                self.current_file = files[1]
+                self.show_we_skipped_to_beginning = True
+
+            elif self.stop_at_file and self.current_file is not None:
+                # find position of current file in list            
                 pos=0
                 try:
                     pos=files.index(self.current_file)
                 except ValueError:
                     # reset attributes and resume streaming
                     self.reset_nav()
+                else:
+                    if self.skip_minute_bck:
+                        self.skip_minute_bck = False
+                        if pos - self.files_in_tstep >= 1:
+                            pos -= self.files_in_tstep
+                        else:
+                            pos = 1
+                    elif self.skip_minute_fwd:
+                        self.skip_minute_fwd = False
+                        if pos + self.files_in_tstep < len(files)-2:
+                            pos += self.files_in_tstep
+                        else:
+                            pos = len(files)-2
 
                 # user wants to move to next file
                 if self.nav_next_file:
@@ -93,13 +129,15 @@ class Ui(object):
                         self.reset_nav()
                         
                 # user wants previous file        
-                if self.nav_prev_file:
+                elif self.nav_prev_file:
                     self.nav_prev_file=False
                     try:
                         self.current_file = files[pos-1]
                     except IndexError:
                         self.reset_nav()
 
+                else:
+                    self.current_file = files[pos]
 
         if self.stop_at_file:
             # make sure user doesn't go to last file because it's empty
@@ -108,6 +146,9 @@ class Ui(object):
                 self.current_file=files[-2] # set to most recent file
         else:
            self.current_file=files[-2]
+
+        if self.current_file != files[1]:
+            self.show_we_skipped_to_beginning = False
 
         return(self.current_file)
 
@@ -125,7 +166,7 @@ class Ui(object):
             files = self.get_files(source)
         return(files)
 
-    def handle_resize(self, window, specgram):
+    def handle_resize(self, window, specgram, nfft=None):
         self.current_height, self.current_width = window.getmaxyx()
         while self.current_height<self.min_height or self.current_width<self.min_width:
             window.erase()
@@ -137,7 +178,15 @@ class Ui(object):
             window.addstr('----------------------------------------------\n')
             window.addstr('Hit Ctrl + C to Exit or resize terminal\n', curses.A_BOLD)
             window.refresh()
+
+            if nfft != None and self.current_width<self.min_width:
+                nfft -= 10
+                self.min_width -= 10
+
             self.current_height, self.current_width = window.getmaxyx()
+
+        if nfft != None:
+            specgram.nfft = nfft
         # this is for adding more lines to the spectrogram when the window is taller than max
         # find out how many more lines we have to play with
         num_new_lines = self.current_height - self.min_height
@@ -155,6 +204,8 @@ class Ui(object):
         # next display will recalc line mod   
         specgram.calc_line_mod=True
 
+        return(nfft)
+
     def toggle(self, state):
         if state:
             return False
@@ -162,18 +213,21 @@ class Ui(object):
 
     def handle_key_strokes(self, window, specgram):
         self.current_time=time.time()
+        temp_nfft = None
         while (self.current_time-self.start) <= specgram.file_length_sec:
             key = window.getch()
             if key == curses.KEY_RESIZE:
-                self.handle_resize(window, specgram)
+                temp_nfft = self.handle_resize(window, specgram, specgram.nfft)
             elif key == curses.KEY_UP:
                 specgram.threshdb+=1
             elif key == curses.KEY_DOWN:
                 specgram.threshdb-=1
             elif key == SHIFT_UP:
-                specgram.nfft+=10
+                temp_nfft = specgram.nfft
+                temp_nfft += 10
             elif key == SHIFT_DOWN:
-                specgram.nfft-=10
+                temp_nfft = specgram.nfft
+                temp_nfft -= 10
             elif key == curses.KEY_RIGHT:
                 specgram.markfreq+=200
             elif key == curses.KEY_LEFT:
@@ -186,15 +240,35 @@ class Ui(object):
                 self.stop_at_file=True
             elif key == ESC:
                 self.reset_nav()
-            elif key == ord('V') or key == ord('v'):
-                if specgram.show_voltage:
-                    self.show_voltage=False
-                    specgram.show_voltage=False
-                    self.min_width-=voltage_bar_width
+            elif key == ord('C') or key == ord('c'):
+                specgram.display_channel += 1
+            elif key == ord('A') or key == ord('a'):
+                self.skip_minute_bck = True
+                self.stop_at_file=True
+                if key == ord('A'):
+                    self.files_in_tstep = 10 * self.get_num_files_in_min()
                 else:
-                    self.show_voltage=True
-                    specgram.show_voltage=True
-                    self.min_width+=voltage_bar_width
+                    self.files_in_tstep = self.get_num_files_in_min()
+            elif key == ord('D') or key == ord('d'):
+                self.skip_minute_fwd = True
+                self.stop_at_file=True
+                if key == ord('D'):
+                    self.files_in_tstep = 10 * self.get_num_files_in_min()
+                else:
+                    self.files_in_tstep = self.get_num_files_in_min()
+            elif key == ord('B') or key == ord('b'):
+                self.skip_to_beginning = True
+                self.stop_at_file=True
+            elif key == ord('V') or key == ord('v'):
+                pass
+                # if specgram.show_voltage:
+                #     self.show_voltage=False
+                #     specgram.show_voltage=False
+                #     self.min_width-=voltage_bar_width
+                # else:
+                #     self.show_voltage=True
+                #     specgram.show_voltage=True
+                #     self.min_width+=voltage_bar_width
             elif key == ord('F') or key == ord('f'):
                 if self.hide_menu:
                     specgram.max_lines=self.specgram_max_lines
@@ -212,12 +286,18 @@ class Ui(object):
             if key != -1:
                 self.key_id=key
 
-            # next display will recalc line mod   
-            if specgram.nfft > 500: 
-                specgram.nfft = 500
+            if temp_nfft != None:
+                # next display will recalc line mod   
+                if temp_nfft > 500: 
+                    temp_nfft = 500
 
-            if specgram.nfft < 10:
-                specgram.nfft = 10
+                if temp_nfft < 10:
+                    temp_nfft = 10
+
+                self.min_width = int(temp_nfft/2)+extra_column_buffer
+                if self.min_width > self.current_width:
+                    temp_nfft = self.handle_resize(window, specgram, temp_nfft)
+                specgram.nfft = temp_nfft
 
             specgram.calc_line_mod=True
 
@@ -225,6 +305,7 @@ class Ui(object):
         self.start=self.current_time
 
     def spin(self, window, specgram):
+        self.current_height, self.current_width = window.getmaxyx()
         self.handle_key_strokes(window, specgram)
         return(window, specgram)
 
@@ -253,9 +334,11 @@ class Ui(object):
             pass
         window.addstr('\n -----------------------------')
         window.addstr('\n refresh count: %s'%(str(count)))
-        self.message_buffer.append('Key ID:   %s'%str(self.key_id))
-        self.message_buffer.append('Line mod: %s'%str(specgram.line_mod))
-        self.message_buffer.append('Rows, Max lines: %s, %s'%(str(specgram.lines_of_data), str(specgram.max_lines)))
+        # self.message_buffer.append('Key ID:   %s'%str(self.key_id))
+        # self.message_buffer.append('Line mod: %s'%str(specgram.line_mod))
+        self.message_buffer.append('max_rows:   {}, rows_shown: {}/{}'.format(specgram.lines_of_data, specgram.lines_of_data, specgram.line_mod))
+        self.message_buffer.append('min_height: {}, min_width:  {}'.format(self.min_height, self.min_width))
+        self.message_buffer.append('max_height: {}, max_width:  {}'.format(self.current_height, self.current_width))
 
         if not self.hide_debugger:
             window.addstr('\n debugging message buffer', curses.A_BOLD)
@@ -267,7 +350,10 @@ class Ui(object):
                 count+=1
 
         window.move(y_row1+1, x_col2) # move to top right corner of col2
-        if self.stop_at_file:
+
+        if self.show_we_skipped_to_beginning:
+            window.addstr('     * Beginning *      ', curses.A_REVERSE | self.color_pair(10))
+        elif self.stop_at_file:
             window.addstr('    Mode: Navigation    ', curses.A_BOLD | self.color_pair(7))
         else:
             window.addstr('    Mode: Streaming     ', self.color_pair(8))
@@ -275,12 +361,15 @@ class Ui(object):
         y, x = specgram.add_intensity_bar(window, y_row1+3,x_col2)
 
         window.move(y_row1, x_col3) # move to top right corner of col3
-        window.addstr(y_row1,x_col3,  'up / down       | adjust the threshold (dB)')
-        window.addstr(y_row1+1,x_col3,'left / right    | adjust the frequency marker (Hz)')
-        window.addstr(y_row1+2,x_col3,'pgup / pgdn     | view next file/view prev file')
-        window.addstr(y_row1+3,x_col3,'Shift+(up/down) | adjust NFFT')
-        window.addstr(y_row1+4,x_col3,'-------------------------------------')
-        window.addstr(y_row1+5,x_col3,'[ESC] Exit navigation mode and stream')
-        window.addstr(y_row1+6,x_col3,'[F | f] toggle full screen')
-        window.addstr(y_row1+7,x_col3,'-----------------------------')
-        window.addstr(y_row1+8,x_col3,'Hit Ctrl + C to Exit', curses.A_BOLD)
+        window.addstr(y_row1,x_col3,   'up / down     | adjust threshold (dB)   ')
+        window.addstr(y_row1+1,x_col3, '^up / ^down   | adjust NFFT             ')
+        window.addstr(y_row1+2,x_col3, 'left / right  | adjust freqmarker (Hz)  ')
+        window.addstr(y_row1+3,x_col3, 'pgup / pgdn   | next file/prev file     ')
+        window.addstr(y_row1+4,x_col3, '[A|a] / [D|d] | skip bck/fwd 10/1 min(s)')
+        window.addstr(y_row1+5,x_col3, '----------------------------------------')
+        window.addstr(y_row1+6,x_col3, '[ESC] exit navigation mode and stream   ')
+        window.addstr(y_row1+7,x_col3, '[F|f] toggle full screen                ')
+        window.addstr(y_row1+8,x_col3, '[C|c] cycle through channels            ')
+        window.addstr(y_row1+9,x_col3, '[B|b] go to beginning                   ')
+        window.addstr(y_row1+10,x_col3,'----------------------------------------')
+        window.addstr(y_row1+11,x_col3,'Hit Ctrl + C to Exit', curses.A_BOLD)

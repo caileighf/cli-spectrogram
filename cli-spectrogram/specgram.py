@@ -17,7 +17,18 @@ import math
 import curses
 
 class Specgram(object):
-    def __init__(self, sample_rate, file_length_sec, display_channel, scale, threshdb, threshdb_steps, markfreq, nfft, max_lines, color_pair, voltage_bar_width, v_min=-1, v_max=1):
+    def __init__(self, sample_rate, 
+                       file_length_sec, 
+                       display_channel, 
+                       scale, threshdb, 
+                       threshdb_steps, 
+                       markfreq, nfft, 
+                       max_lines, 
+                       color_pair, 
+                       voltage_bar_width,
+                       device_name=None, 
+                       v_min=-1, 
+                       v_max=1):
         super(Specgram, self).__init__()
         self.sample_rate=sample_rate
         self.file_length_sec=file_length_sec
@@ -38,6 +49,9 @@ class Specgram(object):
         self.voltage_range=[v_min, v_max]
         self.raw_voltages=[]
         self.argmax_freq = 0.0
+        self.device_name = device_name
+        self.dev_name_color = 100
+        curses.init_pair(self.dev_name_color, curses.COLOR_GREEN, curses.COLOR_BLACK)
 
     def clear(self):
         self.data = []
@@ -61,10 +75,16 @@ class Specgram(object):
             self.clear()
             for i, line in enumerate(f):
                 voltages = line.split(',')
+
+                if len(voltages) <= self.display_channel:
+                    self.display_channel -= 1
+
                 try:
-                    self.data.append(float(voltages[self.display_channel-1]))
+                    self.data.append(float(voltages[self.display_channel]))
                 except ValueError:
                     continue
+                except IndexError as e:
+                    raise Exception(' *index={}, len(voltages)={}'.format(self.display_channel, len(voltages)))
                 else:
                     self.raw_voltages.append(self.data[-1])
             return True
@@ -141,7 +161,7 @@ class Specgram(object):
         window.addstr(y+2,x,'          %sdB          '%str(self.threshdb), curses.A_BOLD)
         return(y+3,x)
 
-    def display(self, stdscr, display_channel):
+    def display(self, stdscr):
         if len(self.data) <= 0:
             stdscr.addstr('parse data from file first!')
             return
@@ -184,13 +204,16 @@ class Specgram(object):
                 gotf=True
                 strbord=strbord+'|'
 
-        stdscr.addstr('Channel [' + str(display_channel) + ']\n', curses.A_BOLD)
+        stdscr.addstr('Channel [' + str(self.display_channel) + '] Device Name: ', curses.A_BOLD)
+        stdscr.addstr('{}\n'.format(self.device_name), self.color_pair(self.dev_name_color) | curses.A_BOLD)
         stdscr.addstr('time [s]')
         stdscr.addstr(fbord[1:] + '\n', curses.A_BOLD)
-        if self.show_voltage:
+
+        if False:#self.show_voltage:
             stdscr.addstr('       ' +  strbord + ' - snapshot RMS voltage +\n')
         else:
             stdscr.addstr('       ' +  strbord + '\n')
+
         ms_vec = list(int(float(x)/self.sample_rate*1000) for x in indvec)
 
         #
@@ -205,7 +228,7 @@ class Specgram(object):
         #
         # Display colors
         #
-        if self.show_voltage:
+        if False:#self.show_voltage:
             mask=self.pop_voltage_bar(rms_voltages)
 
         for row, stro in enumerate(strout):
@@ -218,7 +241,7 @@ class Specgram(object):
                     else:
                         stdscr.addstr('|', self.color_pair(int(char)))
 
-                if self.show_voltage:
+                if False:#self.show_voltage:
                     stdscr.addstr('  ')
                     col=0
                     for col in range(1, self.voltage_bar_width):

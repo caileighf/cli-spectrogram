@@ -24,28 +24,38 @@ import glob
 import time
 import curses
 
-def run_cli(source, sample_rate, file_length_sec, debug, display_channel, threshold_db, markfreq_hz, threshold_steps, nfft):
+def run_cli(source, sample_rate, file_length_sec, debug, 
+    display_channel, threshold_db, markfreq_hz, threshold_steps, nfft, device_name):
     log_dir = source
     if not os.path.isdir(log_dir):
         print('Must provide valid log directory! source=%s'%str(log_dir))
         exit(2)
 
-    stdscr, curses = config_curses()   
+    stdscr, curses = config_curses()
+    console_height, console_width = stdscr.getmaxyx()
     # setup dimensions for window
     columns_of_data = int(nfft/2)
-    min_width = columns_of_data+extra_column_buffer+voltage_bar_width
+    min_width = columns_of_data+extra_column_buffer
+    while min_width > console_width:
+        nfft -= 10
+        columns_of_data = int(nfft/2)
+        min_width = columns_of_data+extra_column_buffer
+
     # make sure window is wide enough to fit the menu
-    if min_width < menu_column_buffer:
+    if min_width <= menu_column_buffer:
         min_width=menu_column_buffer
 
-    min_height = default_console_height
+    min_height = console_height
     max_rows_specgram = min_height-menu_row_buffer
-    max_rows_specgram_no_menu = min_height-3
+    max_rows_specgram_no_menu = min_height
 
     # create Ui object
-    ui = Ui(min_width, min_height, time.time(), curses.color_pair, max_rows_specgram, max_rows_specgram_no_menu)
+    ui = Ui(min_width, min_height, time.time(), curses.color_pair, max_rows_specgram, max_rows_specgram_no_menu, file_length_sec=file_length_sec)
     # create specgram object 
-    specgram = Specgram(sample_rate, file_length_sec, display_channel, scale='dB', threshdb=threshold_db, threshdb_steps=threshold_steps, markfreq=markfreq_hz, nfft=nfft, max_lines=ui.specgram_max_lines, color_pair=curses.color_pair, voltage_bar_width=voltage_bar_width)
+    specgram = Specgram(sample_rate, file_length_sec, display_channel, 
+        device_name=device_name, scale='dB', threshdb=threshold_db, threshdb_steps=threshold_steps, 
+        markfreq=markfreq_hz, nfft=nfft, max_lines=ui.specgram_max_lines, color_pair=curses.color_pair, 
+        voltage_bar_width=voltage_bar_width)
 
     # now dow stuff
     try:
@@ -91,7 +101,7 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
             # clear curses window
             stdscr.erase()
             try:
-                specgram.display(stdscr, display_channel)
+                specgram.display(stdscr)
                 ui.update(stdscr, specgram, is_dup, count)
                 # spin ui will display menu and handle user inputs
                 stdscr, specgram = ui.spin(stdscr, specgram)
@@ -100,6 +110,7 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
 
             # draw everything in the buffer 
             stdscr.refresh()
+
             count+=1
             if count%100==0:
                 ui.message_buffer = []
@@ -121,8 +132,9 @@ def run_cli(source, sample_rate, file_length_sec, debug, display_channel, thresh
 
 def main():
     parser = argparse.ArgumentParser(description='')
-    parser.add_argument('--sample-rate', help='', required=True, type=float)
-    parser.add_argument('--file-length', help='in seconds', required=True, type=float)
+    parser.add_argument('--sample-rate', help='', required=False, type=float)
+    parser.add_argument('--device-name', help='', default=None, type=str)
+    parser.add_argument('--file-length', help='in seconds', required=False, type=float)
     parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
     parser.add_argument('--source', help='Source directory with .txt files', required=False)
     parser.add_argument('--threshold-steps', help='How many dB above and below threshold', required=False, type=int)
@@ -130,10 +142,26 @@ def main():
     parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
     parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
     parser.add_argument('--nfft', help='', required=False, type=int)
-    parser.set_defaults(source=os.getcwd(), display_channel=1, threshold_db=75, markfreq_hz=5000, threshold_steps=5, nfft=300)
+    parser.set_defaults(source=os.getcwd(), 
+                        display_channel=0, 
+                        threshold_db=90, 
+                        markfreq_hz=5000, 
+                        threshold_steps=5, 
+                        nfft=240,
+                        sample_rate=19200,
+                        file_length=1.0)
     args = parser.parse_args()
 
-    curses.wrapper(run_cli(args.source, args.sample_rate, args.file_length, args.debug, args.display_channel, args.threshold_db, args.markfreq_hz, args.threshold_steps, args.nfft))
+    curses.wrapper(run_cli(args.source, 
+                           args.sample_rate, 
+                           args.file_length, 
+                           args.debug, 
+                           args.display_channel, 
+                           args.threshold_db, 
+                           args.markfreq_hz, 
+                           args.threshold_steps, 
+                           args.nfft,
+                           args.device_name))
 
 
 if __name__ == '__main__':
