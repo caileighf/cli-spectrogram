@@ -138,7 +138,7 @@ def main():
     parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
     parser.add_argument('--source', help='Source directory with .txt files', required=False)
     parser.add_argument('--threshold-steps', help='How many dB above and below threshold', required=False, type=int)
-    parser.add_argument('-c','--display-channel', help='', required=False, type=int, choices=range(1, 9))
+    parser.add_argument('-c','--display-channel', help='', required=False, type=int, choices=range(0, 8))
     parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
     parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
     parser.add_argument('--nfft', help='', required=False, type=int)

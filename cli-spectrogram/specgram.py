@@ -77,7 +77,7 @@ class Specgram(object):
                 voltages = line.split(',')
 
                 if len(voltages) <= self.display_channel:
-                    self.display_channel -= 1
+                    self.display_channel = 0
 
                 try:
                     self.data.append(float(voltages[self.display_channel]))
