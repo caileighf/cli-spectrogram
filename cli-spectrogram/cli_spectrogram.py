@@ -24,6 +24,18 @@ import glob
 import time
 import curses
 
+def handle_config(args):
+    import json
+    with open('{}/ACBOX/MCC_DAQ/config.json'.format(os.path.expanduser('~')), 'r') as f:
+        data = json.load(f)
+    
+    args.source = data['data_directory']
+    args.file_length = data['file_length_sec']
+    args.sample_rate = data['sample_rate']
+    args.mode = data['file_mode']
+
+    return(args)
+
 def run_cli(source, sample_rate, file_length_sec, debug, 
     display_channel, threshold_db, markfreq_hz, threshold_steps, nfft, device_name):
     log_dir = source
@@ -142,6 +154,7 @@ def main():
     parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
     parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
     parser.add_argument('--nfft', help='', required=False, type=int)
+    parser.add_argument('--use-config', help='Use config file', action='store_true')    
     parser.set_defaults(source=os.getcwd(), 
                         display_channel=0, 
                         threshold_db=90, 
@@ -151,6 +164,9 @@ def main():
                         sample_rate=19200,
                         file_length=1.0)
     args = parser.parse_args()
+
+    if args.use_config:
+        args = handle_config(args)
 
     curses.wrapper(run_cli(args.source, 
                            args.sample_rate, 

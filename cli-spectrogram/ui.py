@@ -216,6 +216,9 @@ class Ui(object):
         temp_nfft = None
         while (self.current_time-self.start) <= specgram.file_length_sec:
             key = window.getch()
+            if key != -1:
+                with open('cli-log.txt', 'a+') as f:
+                    f.write('[{}]: Key: {}\n'.format(time.time(), key))
             if key == curses.KEY_RESIZE:
                 temp_nfft = self.handle_resize(window, specgram, specgram.nfft)
             elif key == curses.KEY_UP:
