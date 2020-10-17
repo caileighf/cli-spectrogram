@@ -108,6 +108,8 @@ class Specgram(object):
                 fdb = list(20*math.log(abs(x)/pow(10,-6),10) for x in fvec[0:int(self.nfft/2)])
             except ValueError as e:
                 print('Caught ValueError! Most likely bad data...\n{}'.format(e))
+                with open('/cli-log.txt'.format(os.getcwd()), 'a+') as f:
+                    f.write('Voltage that threw Exception: {}\n{}\n'.format(v, e))
                 # import ipdb; ipdb.set_trace() # BREAKPOINT
                 return(None, None, None)
 

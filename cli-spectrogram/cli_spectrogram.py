@@ -62,7 +62,8 @@ def run_cli(source, sample_rate, file_length_sec, debug,
     max_rows_specgram_no_menu = min_height
 
     # create Ui object
-    ui = Ui(min_width, min_height, time.time(), curses.color_pair, max_rows_specgram, max_rows_specgram_no_menu, file_length_sec=file_length_sec)
+    ui = Ui(min_width, min_height, time.time(), curses.color_pair, max_rows_specgram, max_rows_specgram_no_menu, 
+        file_length_sec=file_length_sec, sample_rate=sample_rate)
     # create specgram object 
     specgram = Specgram(sample_rate, file_length_sec, display_channel, 
         device_name=device_name, scale='dB', threshdb=threshold_db, threshdb_steps=threshold_steps, 

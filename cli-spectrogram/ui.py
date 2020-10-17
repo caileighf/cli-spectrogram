@@ -23,7 +23,7 @@ import curses
 
 class Ui(object):
     def __init__(self, min_width, min_height, current_time, color_pair, max_rows_specgram, 
-        max_rows_specgram_no_menu, message_buffer_display_limit=3, mode='text', file_length_sec=1):
+        max_rows_specgram_no_menu, sample_rate, message_buffer_display_limit=3, mode='text', file_length_sec=1):
         super(Ui, self).__init__()
         self.min_width = min_width
         self.min_height = min_height
@@ -50,6 +50,7 @@ class Ui(object):
         self.skip_minute_bck = False
         self.skip_to_beginning = False
         self.show_we_skipped_to_beginning = False
+        self.sample_rate = sample_rate
         self.file_length_sec = file_length_sec
         self.files_in_tstep = self.get_num_files_in_min()
 
@@ -87,6 +88,11 @@ class Ui(object):
             return(sorted(pathlib.Path(source).glob('1*.bin')))
         else:
             return(sorted(pathlib.Path(source).glob('*.txt')))
+
+    def is_valid_file(self, file):
+        num_lines = sum(1 for line in open(file))
+        valid_num_lines = int(self.sample_rate * self.file_length_sec)
+        return(num_lines == valid_num_lines)
 
     def get_file(self, window, source):
         files = self.get_files(source)
@@ -145,7 +151,10 @@ class Ui(object):
                 self.reset_nav()
                 self.current_file=files[-2] # set to most recent file
         else:
-           self.current_file=files[-2]
+            if self.is_valid_file(files[-2]):
+                self.current_file=files[-2]
+            else:
+                self.current_file=files[-3]
 
         if self.current_file != files[1]:
             self.show_we_skipped_to_beginning = False
