@@ -37,6 +37,20 @@ def run_cli(ui, specgram):
     while True:
         ui.spin()
 
+def handle_config(args):
+    import json
+    config_file = os.getenv('_DAQ_CONFIG')
+    if config_file != None:
+        with open(config_file, 'r') as f:
+            data = json.load(f)
+
+        args.source = data['data_directory']
+        args.file_length = data['file_length_sec']
+        args.sample_rate = data['sample_rate']
+        args.mode = data['file_mode']
+
+    return(args)
+
 def main(stdscr):
     parser = argparse.ArgumentParser(description='cli-spectrogram')
     parser.add_argument('--sample-rate', help='', required=False, type=float)
@@ -49,7 +63,7 @@ def main(stdscr):
     parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
     parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
     parser.add_argument('--nfft', help='', required=False, type=int)
-    # parser.add_argument('--use-config', help='Use config file', action='store_true')    
+    parser.add_argument('--use-config', help='Use config file', action='store_true')    
     parser.set_defaults(source=os.getcwd(), 
                         display_channel=0, 
                         threshold_db=85, 
@@ -60,8 +74,8 @@ def main(stdscr):
                         file_length=1.0)
     args = parser.parse_args()
 
-    # if args.use_config:
-    #     args = handle_config(args)
+    if args.use_config:
+        args = handle_config(args)
 
     ui = Ui(stdscr=stdscr)
     plot_win = ui.new_full_size_window(name='specgram_plot')

@@ -132,7 +132,9 @@ class FileNavManager(object):
 
     @property
     def current_file(self):
-        return self._current_file
+        if self._current_file == None:
+            self._current_file = pathlib.Path('NO-DATA-FILES-FOUND')
+        return(self._current_file)
     
     @property
     def state(self):
@@ -179,7 +181,7 @@ class FileNavManager(object):
             self.cursor_pos += 1
 
         self._current_file = next_file
-        return(next_file)
+        return(self.current_file)
 
     def is_streaming(self):
         return(self._state == 'Streaming')
@@ -196,7 +198,7 @@ class FileNavManager(object):
         sys.exit()
 
     def _update_files(self):
-        self._files = sorted(pathlib.Path(self.data_dir).glob('*.txt'))[:-1]
+        self._files = sorted(pathlib.Path(self.data_dir).glob('1*.txt'))[:-1]
         return(len(self._files))
 
 class Cursor(object):

@@ -610,7 +610,11 @@ class Specgram(object):
     def create_specgram(self):
         done = False
         start = 0
-        data = self.get_data()
+        try:
+            data = self.get_data()
+        except FileNotFoundError:
+            data = [0.0]
+
         rows = []
         time_vector = []
         while not done:
