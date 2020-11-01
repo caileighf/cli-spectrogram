@@ -612,7 +612,7 @@ class Specgram(object):
         start = 0
         try:
             data = self.get_data()
-        except FileNotFoundError:
+        except IOError:
             data = [0.0]
 
         rows = []
