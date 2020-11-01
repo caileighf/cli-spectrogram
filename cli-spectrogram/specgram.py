@@ -14,7 +14,7 @@
 #
 from __future__ import print_function
 from common import (KeystrokeCallable, WindowDimensions, FileNavManager, CursesPixel)
-from common import (default_emphasis, ESC, SHIFT_UP, SHIFT_DOWN, SHIFT_LEFT, SHIFT_RIGHT)
+from common import (default_emphasis, ESC, Q_MARK, SHIFT_UP, SHIFT_DOWN, SHIFT_LEFT, SHIFT_RIGHT)
 from common import (
         TOP_LEFT,
         TOP_RIGHT,
@@ -27,6 +27,7 @@ from common import (
         STANDOUT_GREEN,
         STANDOUT_RED
     )
+import sys
 import numpy
 import math
 import datetime
@@ -53,7 +54,8 @@ class Specgram(object):
 
     """
     def __init__(self, window, 
-                       legend,
+                       upper_legend,
+                       lower_legend,
                        source,
                        register_keystroke_callable,
                        file_manager,
@@ -67,16 +69,21 @@ class Specgram(object):
                        file_length=1.0):
         super(Specgram, self).__init__()
         self.window = window
-        self.legend = legend
+        self.legend = upper_legend
+        self.lower_legend = lower_legend
         self.first_draw = False
         self.force_redraw = True
         self.window.add_callback(self.redraw_specgram)
         self.window.fill_screen = True
         self.window.on_state_change.append(self.handle_plot_state_change)
-        self.legend.add_callback(self.redraw_legend)
+        self.legend.add_callback(self.redraw_upper_legend)
+        self.lower_legend.add_callback(self.redraw_lower_legend)
         self.legend.border_on = True
-        self.legend.corner = RIGHT
+        self.lower_legend.border_on = True
+        self.legend.corner = TOP_RIGHT
+        self.lower_legend.corner = BOTTOM_RIGHT
         self.legend.sticky_sides = True
+        self.lower_legend.sticky_sides = True
 
         self.max_rows = self.window.rows
         self.max_columns = self.window.columns
@@ -128,13 +135,16 @@ class Specgram(object):
                               call=[self.handle_navigation],
                               case_sensitive=False),
             KeystrokeCallable(key_id=ord('F'),
-                              key_name='f',
+                              key_name='F',
                               call=[self.full_screen],
                               case_sensitive=False),
             KeystrokeCallable(key_id=ord('H'),
                               key_name='H',
                               call=[self.toggle_legend],
                               case_sensitive=False),
+            KeystrokeCallable(key_id=Q_MARK,
+                              key_name='?',
+                              call=[self.handle_config]),
             KeystrokeCallable(key_id=KEY_UP,
                               key_name='Up',
                               call=[self.handle_navigation]),
@@ -170,57 +180,64 @@ class Specgram(object):
                               call=[self.handle_navigation]),
         ]
         for key in self.keymap:
-            self.register_keystroke_callable(keystroke_callable=key)
+            self.register_keystroke_callable(keystroke_callable=key, update=True)
 
     @property
     def legend_data(self):
         return({
-            'File Information': {
-                'File': self.file_manager.current_file.name,
-                'Time': self.get_formatted_dt(),
-                'Device Name': self.device_name,
-                '__dataset_position_marker__':
-                    self.create_dataset_position_bar(),
-            },
-            'Spectrogram Information': {
-                'Threshold (dB)': self.threshold_db,
-                'Sample Rate (Hz)': self.sample_rate,
-                'Max Freq': self.argmax_freq,
-                'NFFT': self.nfft,
-            },
-            '__channel_bar__':
-                self.create_channel_bar(),
-            '__mode_bar__': 
-                self.create_mode_bar(),
-            '__intensity_bar__': 
-                self.create_intensity_bar(),
-            'Keyboard Shortcuts': {
-                'Up / Down': 'Adjust color threshold by +/-{}dB'.format(self.threshold_steps),
-                'Shift + (Up / Down)': 'Adjust NFFT by +/-{}'.format(self.nfft_step),
-                'Left / Right': 'Move mark frequency by +/-100Hz',
-                '__hline00__': self.legend.hline(ch=' '),
-                'C / c': 'Cycle through channels',
-                '__hline01__': self.legend.hline(ch=' '),
-                'Pg Up / Pg Down': 'Previous file / Next file',
-                'A / a': 'Move backwards 60 seconds / 10 seconds',
-                'D / d': 'Move forwards 60 seconds / 10 seconds',
-                'B / b': 'Jump to beginning of dataset',
-                'E / e': 'Jump to end of dataset',
-                'Escape': 'Resume streaming',
-                '__hline02__': self.legend.hline(ch=' '),
-                'Shift + Left': 'Move legend left',
-                'Shift + Right': 'Move legend right',
-                'H / h': 'Toggle legend on / off',
-                # 'F / f': 'Toggle legend on / off',
-            },
-            # 'Legend Panel Info': {
-            #     'x': self.legend.window_dimensions.x,
-            #     'y': self.legend.window_dimensions.y,
-            #     'rows': self.legend.window_dimensions.rows,
-            #     'columns': self.legend.window_dimensions.columns,
-            #     'term size': self.legend.term_size,
-            # }
+                'UPPER': {
+                    'File Information': {
+                        'File': self.file_manager.current_file.name,
+                        'Time': self.get_formatted_dt(),
+                        'Device Name': self.device_name,
+                        '__dataset_position_marker__':
+                            self.create_dataset_position_bar(),
+                    },
+                    'Spectrogram Information': {
+                        'Threshold (dB)': self.threshold_db,
+                        'Sample Rate (Hz)': self.sample_rate,
+                        'Max Freq': self.argmax_freq,
+                        'NFFT': self.nfft,
+                    },
+                    '__channel_bar__':
+                        self.create_channel_bar(),
+                    '__mode_bar__': 
+                        self.create_mode_bar(),
+                    '__intensity_bar__': 
+                        self.create_intensity_bar(),
+                },
+                'LOWER': {
+                    'Keyboard Shortcuts': {
+                        'Up / Down': 'Adjust color threshold by +/-{}dB'.format(self.threshold_steps),
+                        'Shift + (Up / Down)': 'Adjust NFFT by +/-{}'.format(self.nfft_step),
+                        'Left / Right': 'Move mark frequency by +/-100Hz',
+                        '__hline00__': self.lower_legend.hline(ch=' '),
+                        'C / c': 'Cycle through channels',
+                        '__hline01__': self.lower_legend.hline(ch=' '),
+                        'Pg Up / Pg Down': 'Previous file / Next file',
+                        'A / a': 'Move backwards 60 seconds / 10 seconds',
+                        'D / d': 'Move forwards 60 seconds / 10 seconds',
+                        'B / b': 'Jump to beginning of dataset',
+                        'E / e': 'Jump to end of dataset',
+                        'Escape': 'Resume streaming',
+                        '__hline02__': self.lower_legend.hline(ch=' '),
+                        'Shift + Left': 'Move legend left',
+                        'Shift + Right': 'Move legend right',
+                        'H / h': 'Toggle keyboard shortcuts on / off',
+                        'F / f': 'Toggle full screen on / off',
+                    },
+                    # 'Legend Panel Info': {
+                    #     'x': self.legend.window_dimensions.x,
+                    #     'y': self.legend.window_dimensions.y,
+                    #     'rows': self.legend.window_dimensions.rows,
+                    #     'columns': self.legend.window_dimensions.columns,
+                    #     'term size': self.legend.term_size,
+                    # }
+                }
         })
+
+    def handle_config(self, key):
+        pass
 
     def handle_navigation(self, key):
         if not key.case_sensitive:
@@ -271,8 +288,10 @@ class Specgram(object):
     def handle_move_legend(self, key):
         if key.key_id == SHIFT_LEFT:
             self.legend.move_left()
+            self.lower_legend.move_left()
         else:
             self.legend.move_right()
+            self.lower_legend.move_right()
 
     def create_dataset_position_bar(self):
         if self.file_manager.is_streaming():
@@ -379,38 +398,57 @@ class Specgram(object):
             self.handle_nfft(self.window.columns, expand=True)
 
     def full_screen(self, args):
-        pass
+        if self.lower_legend.is_hidden() or self.legend.is_hidden():
+            self.lower_legend.show()
+            self.legend.show()
+        else:
+            self.lower_legend.hide()
+            self.legend.hide()
 
     def toggle_legend(self, args):
-        self.legend.toggle_visibility()
+        self.lower_legend.toggle_visibility()
         self.window.refresh()
 
-    def redraw_legend(self, term_size):
-        if self.legend.is_hidden():
+    def redraw_lower_legend(self, term_size):
+        self.redraw_legend(legend_data=self.legend_data['LOWER'], term_size=term_size, is_upper=False)
+
+    def redraw_upper_legend(self, term_size):
+        self.redraw_legend(legend_data=self.legend_data['UPPER'], term_size=term_size, is_upper=True)
+
+    def redraw_legend(self, legend_data, term_size, is_upper):
+        if is_upper:
+            legend = self.legend 
+        else:
+            legend = self.lower_legend
+
+        if legend.is_hidden():
             return
 
-        self.legend.clear_buffer()
-        self.legend.buffer.append([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_NORMAL)])
-        for outer_k, outer_v in self.legend_data.items():
+        legend.clear_buffer()
+        legend.buffer.append([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_NORMAL)])
+        for outer_k, outer_v in legend_data.items():
             # if key starts with __ that means it's already a list of curses pixels so append as is
             if outer_k[:2] == '__':
-                self.legend.buffer.append(outer_v)
+                legend.buffer.append(outer_v)
                 continue
 
-            self.legend.buffer.append([
-                    CursesPixel(text=' {}'.format(outer_k).center(self.legend.columns - 1), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+            legend.buffer.append([
+                    CursesPixel(text=' {}'.format(outer_k).center(legend.columns - 1), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
                 ])
-            self.legend.buffer.append(self.legend.hline())
+            legend.buffer.append(legend.hline())
             for k, v in outer_v.items():
                 if k[:2] == '__':
-                    self.legend.buffer.append(v)
+                    legend.buffer.append(v)
                     continue
 
-                self.legend.buffer.append([
+                legend.buffer.append([
                         CursesPixel(text='  {}: '.format(k), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
                         CursesPixel(text='{}'.format(v), fg=-1, bg=COLOR_BLACK, attr=A_NORMAL)
                     ])
-            if k[:2] != '__': self.legend.buffer.append(self.legend.hline(ch=' '))
+            if k[:2] != '__': legend.buffer.append(legend.hline(ch=' '))
+
+        # if '2.7' not in sys.version:
+        #     legend.hard_clear()
 
     def redraw_specgram(self, term_size):
         if self.file_manager.next_file() == self.current_file:
