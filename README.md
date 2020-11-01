@@ -1,8 +1,8 @@
 # Command Line Interface Spectrogram
-## cli-spectrogram
+## cli-spectrogram Version 2.0
 Simple python module that creates spectrograms from multi channel hydrophone array data in the command line.
 
-![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/default.png "Default view")
+![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/dev/images/version_2_clean.png.png "Default view")
 
 ### Purpose
 Our group needed a lightweight, command line tool to look at spectrogram data coming from multi channel hydrophone arrays. 
@@ -58,15 +58,11 @@ optional arguments:
 ### Different ways to launch cli-spectrogram
 `$ cli_spectrogram --sample-rate 38400 --file-length 1 --source ./examples `
 
-![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/default.png "Default view")
+![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/version_2_cmd_1.png "Default view")
 
 `$ cli_spectrogram --sample-rate 38400 --file-length 1 --source ./examples --markfreq-hz 2000 --threshold-db 80`
 
-![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/basic.png "With threshold passed and mark frequency passed")
-
 `$ cli_spectrogram --sample-rate 38400 --file-length 1 --source ./examples --markfreq-hz 2000 --threshold-db 80 --threshold-steps 20 `
-
-![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/thresh_tolerance.png "With threshold passed and mark frequency passed and threshold steps")
 
 
 ### Navigating the user interface
@@ -74,7 +70,7 @@ __Adjust the Threshold (dB)__
 * press the __'up arrow'__ to increase the threshold dB value by `THRESHOLD_STEPS`.
 * press the __'down arrow'__ to decrease the threshold dB value by `THRESHOLD_STEPS`.
 
-![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/low_threshold.png "Low threshold")
+![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/version_2_chan_1.png.png "Low threshold")
 ![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/medium_threshold.png "Medium threshold")
 ![](https://raw.githubusercontent.com/caileighf/cli-spectrogram/master/images/high_threshold.png "High threshold")
 
