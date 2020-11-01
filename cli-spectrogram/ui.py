@@ -12,6 +12,7 @@
 #
 # File: ui.py
 #
+from __future__ import print_function
 import time, os
 import curses, curses.panel
 import traceback

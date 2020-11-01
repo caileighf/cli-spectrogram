@@ -12,6 +12,7 @@
 #
 # File: specgram.py
 #
+from __future__ import print_function
 from common import (KeystrokeCallable, WindowDimensions, FileNavManager, CursesPixel)
 from common import (default_emphasis, ESC, SHIFT_UP, SHIFT_DOWN, SHIFT_LEFT, SHIFT_RIGHT)
 from common import (
@@ -411,8 +412,6 @@ class Specgram(object):
                     ])
             if k[:2] != '__': self.legend.buffer.append(self.legend.hline(ch=' '))
 
-        self.legend.hard_clear()
-
     def redraw_specgram(self, term_size):
         if self.file_manager.next_file() == self.current_file:
             if not self.first_draw:
@@ -428,7 +427,7 @@ class Specgram(object):
     def get_data(self):
         self.current_file = self.file_manager.next_file()
         data = []
-        with open(self.current_file, 'r') as f:
+        with open(str(self.current_file), 'r') as f:
             for line in f.readlines():
                 channel_data = line.strip().split(',')
                 self.available_channels = len(channel_data)

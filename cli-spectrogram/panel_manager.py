@@ -1,3 +1,4 @@
+from __future__ import print_function
 from common import Cursor
 from common import (WindowDimensions, CursesPixel, Cursor, get_term_size)
 from common import (

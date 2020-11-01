@@ -12,10 +12,10 @@
 #
 # File: cli_spectrogram.py
 #
+from __future__ import print_function
 import argparse
 import os, sys, time
 import curses
-# import json
 
 # internal
 from ui import Ui
