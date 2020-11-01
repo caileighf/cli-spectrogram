@@ -8,380 +8,218 @@
 # Woods Hole Oceanographic Institution
 # Author: Caileigh Fitzgerald
 # Email:  cfitzgerald@whoi.edu
-# Date:   03/04/2020
+# Date:   1-/17/2020
 #
 # File: ui.py
 #
-from common import voltage_bar_width, menu_row_buffer, extra_column_buffer, ESC, SHIFT_UP, SHIFT_DOWN, unix_epoch_to_local
-import os
-import numpy
-import math
-import pathlib
-import glob
-import time
-import curses
+import time, os
+import curses, curses.panel
+import traceback
 
+from common import (KeystrokeCallable, WindowDimensions, Cursor, get_term_size)
+from panel_manager import PanelManager
+from common import (
+        TOP_LEFT,
+        TOP_RIGHT,
+        BOTTOM_LEFT,
+        BOTTOM_RIGHT,
+        TOP,
+        BOTTOM,
+        LEFT,
+        RIGHT
+    )
+    
 class Ui(object):
-    def __init__(self, min_width, min_height, current_time, color_pair, max_rows_specgram, 
-        max_rows_specgram_no_menu, sample_rate, message_buffer_display_limit=3, mode='text', file_length_sec=1):
+    """docstring for Ui
+
+    The Ui class manages all things related to curses and what is displayed
+    """
+    def __init__(self, stdscr, refresh_hz=1):
         super(Ui, self).__init__()
-        self.min_width = min_width
-        self.min_height = min_height
-        self.current_time = current_time
-        self.start = current_time
-        self.nav_next_file = False
-        self.nav_prev_file = False
-        self.stop_at_file = False
-        self.current_file = None
-        self.hide_menu = False
-        self.hide_debugger = False
-        self.specgram_max_lines = max_rows_specgram
-        self.specgram_max_lines_no_menu = max_rows_specgram_no_menu
-        self.key_id=ESC
-        self.mode=mode
-        self.color_pair=color_pair
-        self.current_width=0
-        self.current_height=0
-        self.num_resets=0
-        self.message_buffer=[]
-        self.message_buffer_display_limit=message_buffer_display_limit
-        self.adjusting_nfft=False
-        self.skip_minute_fwd = False
-        self.skip_minute_bck = False
-        self.skip_to_beginning = False
-        self.show_we_skipped_to_beginning = False
-        self.sample_rate = sample_rate
-        self.file_length_sec = file_length_sec
-        self.files_in_tstep = self.get_num_files_in_min()
+        self.base_window = stdscr
+        self.refresh_rate = refresh_hz
+        # holds all panels (other classes can add panels)
+        self.panels = {
+            'main': self._init_panel(),
+        }
+        # key map callables (on key do x)
+        self.keymap = {
+            curses.KEY_DC: KeystrokeCallable(key_id=curses.KEY_DC,
+                                             key_name='DELETE',
+                                             call=[self.log_keystroke, self._kill],
+                                             case_sensitive=True),
+            curses.KEY_RESIZE: KeystrokeCallable(key_id=curses.KEY_RESIZE,
+                                                 key_name='RESIZE',
+                                                 call=[self.log_keystroke, self.handle_resize],
+                                                 case_sensitive=True),
+        }
+        # set base window to nodelay so getch will be non-blocking
+        self.base_window.nodelay(True)
+        curses.curs_set(False)
 
-    def get_num_files_in_min(self):
-        if self.file_length_sec >= 1:
-            files_in_min = int(60 / self.file_length_sec)
+    @property
+    def main_window(self):
+        return(self.panels['main'])
+
+    def handle_resize(self, args):
+        {panel.handle_resize() for panel_id, panel in self.panels.items() if panel_id != 'main'}
+
+    def new_corner_window(self, corner, rows, columns, name, 
+                          output=None, set_focus=True, 
+                          overwrite=False, callback=[]):
+        height, width = get_term_size()
+        if corner == TOP_RIGHT or corner == TOP_LEFT or\
+           corner == TOP or corner == LEFT or corner == RIGHT:
+            y = 0
         else:
-            files_in_min = int(self.file_length_sec * 60)
-        return(files_in_min)
+            y = height - rows
 
-    def hard_reset(self, window, specgram, max_rows_specgram, max_rows_specgram_no_menu):
-        self.reset_nav()
-        self.specgram_max_lines = max_rows_specgram
-        self.specgram_max_lines_no_menu = max_rows_specgram_no_menu
-        self.hide_menu = False
-        specgram.max_lines=self.specgram_max_lines
-        # next display will recalc line mod   
-        specgram.calc_line_mod=True
-        specgram.show_voltage=False
-        self.show_voltage=False
-        self.hide_debugger=False
-        self.num_resets+=1
-
-    def reset_nav(self):
-        self.stop_at_file=False
-        self.nav_prev_file=False
-        self.nav_next_file=False
-        self.show_we_skipped_to_beginning=False
-        self.skip_minute_fwd = False
-        self.skip_minute_bck = False
-        self.skip_to_beginning = False
-
-    def get_files(self, source):
-        if self.mode=='binary':
-            return(sorted(pathlib.Path(source).glob('1*.bin')))
+        if corner == BOTTOM_LEFT or corner == TOP_LEFT or\
+           corner == TOP or corner == LEFT:
+            x = 0
         else:
-            return(sorted(pathlib.Path(source).glob('*.txt')))
+            x = width - columns
 
-    def is_valid_file(self, file):
-        num_lines = sum(1 for line in open(file))
-        valid_num_lines = int(self.sample_rate * self.file_length_sec)
-        return(num_lines == valid_num_lines)
+        if corner == TOP or corner == BOTTOM:
+            columns = width
+        elif corner == LEFT or corner == RIGHT:
+            rows = height
 
-    def get_file(self, window, source):
-        files = self.get_files(source)
-        if len(files) <= 2:
-            files = self.handle_no_files(window, source)
-        else:
-            if self.skip_to_beginning and self.current_file is not None:
-                self.skip_to_beginning = False
-                self.current_file = files[1]
-                self.show_we_skipped_to_beginning = True
+        return(self.new_window(x, y, rows, columns, name, output, set_focus, overwrite, callback))
 
-            elif self.stop_at_file and self.current_file is not None:
-                # find position of current file in list            
-                pos=0
-                try:
-                    pos=files.index(self.current_file)
-                except ValueError:
-                    # reset attributes and resume streaming
-                    self.reset_nav()
-                else:
-                    if self.skip_minute_bck:
-                        self.skip_minute_bck = False
-                        if pos - self.files_in_tstep >= 1:
-                            pos -= self.files_in_tstep
-                        else:
-                            pos = 1
-                    elif self.skip_minute_fwd:
-                        self.skip_minute_fwd = False
-                        if pos + self.files_in_tstep < len(files)-2:
-                            pos += self.files_in_tstep
-                        else:
-                            pos = len(files)-2
+    def new_window(self, x, y, rows, columns, name, 
+                         output=None, set_focus=True, 
+                         overwrite=False, callback=[]):
+        if name == 'main': raise AttributeError('Cannot overwrite the main panel')
 
-                # user wants to move to next file
-                if self.nav_next_file:
-                    self.nav_next_file=False
-                    try:
-                        self.current_file = files[pos+1]
-                    except IndexError:
-                        self.reset_nav()
-                        
-                # user wants previous file        
-                elif self.nav_prev_file:
-                    self.nav_prev_file=False
-                    try:
-                        self.current_file = files[pos-1]
-                    except IndexError:
-                        self.reset_nav()
-
-                else:
-                    self.current_file = files[pos]
-
-        if self.stop_at_file:
-            # make sure user doesn't go to last file because it's empty
-            if os.path.getsize(str(self.current_file)) <= 0:
-                self.reset_nav()
-                self.current_file=files[-2] # set to most recent file
-        else:
-            if self.is_valid_file(files[-2]):
-                self.current_file=files[-2]
+        if name in self.panels:
+            if not overwrite:
+                return(None)
             else:
-                self.current_file=files[-3]
-
-        if self.current_file != files[1]:
-            self.show_we_skipped_to_beginning = False
-
-        return(self.current_file)
-
-    def handle_no_files(self, window, source):
-        files = self.get_files(source)
-        while len(files) <= 2:
-            window.erase()
-            window.nodelay(False)
-            window.addstr('No files in the log directory!\n',curses.A_BOLD)
-            window.addstr('----------------------------------------------\n')
-            window.addstr('Current directory:  %s\n'%(str(source)))
-            window.addstr('----------------------------------------------\n')
-            window.addstr('Hit Ctrl + C to Exit or wait for log files\n', curses.A_BOLD)
-            window.refresh()
-            files = self.get_files(source)
-        return(files)
-
-    def handle_resize(self, window, specgram, nfft=None):
-        self.current_height, self.current_width = window.getmaxyx()
-        while self.current_height<self.min_height or self.current_width<self.min_width:
-            window.erase()
-            window.nodelay(False)
-            window.addstr('The terminal window is too small!\n',curses.A_BOLD)
-            window.addstr('----------------------------------------------\n')
-            window.addstr('The minimum width is:  %i\tCurrent width:  %i\n'%(self.min_width, self.current_width))
-            window.addstr('The minimum height is: %i\tCurrent height: %i\n'%(self.min_height, self.current_height))
-            window.addstr('----------------------------------------------\n')
-            window.addstr('Hit Ctrl + C to Exit or resize terminal\n', curses.A_BOLD)
-            window.refresh()
-
-            if nfft != None and self.current_width<self.min_width:
-                nfft -= 10
-                self.min_width -= 10
-
-            self.current_height, self.current_width = window.getmaxyx()
-
-        if nfft != None:
-            specgram.nfft = nfft
-        # this is for adding more lines to the spectrogram when the window is taller than max
-        # find out how many more lines we have to play with
-        num_new_lines = self.current_height - self.min_height
-        # first reset specgram_max_lines to original value
-        self.specgram_max_lines = self.min_height-menu_row_buffer
-        self.specgram_max_lines_no_menu = self.min_height
-        # now add the number of new lines to max
-        self.specgram_max_lines += num_new_lines
-        self.specgram_max_lines_no_menu += num_new_lines
-        # find out if we are in full screen or not
-        if self.hide_menu:
-            specgram.max_lines=self.specgram_max_lines_no_menu
+                win = self._init_panel(WindowDimensions(x=x, y=y, rows=rows, columns=columns))
+                self.panels[name].replace(window=win)
         else:
-            specgram.max_lines=self.specgram_max_lines
-        # next display will recalc line mod   
-        specgram.calc_line_mod=True
+            self.panels[name] = self._init_panel(WindowDimensions(x=x, y=y, rows=rows, columns=columns))
 
-        return(nfft)
+        if output != None:
+            self.panels[name].print(output)
+        self.panels[name].set_focus() if set_focus else self.panels[name].hide()
+        return(self.panels[name])
 
-    def toggle(self, state):
-        if state:
-            return False
-        return True
+    def new_full_size_window(self, name, output=None, set_focus=True, overwrite=True, callback=[]):
+        rows, columns = get_term_size()
+        return(self.new_window(x=0, y=0, rows=rows, columns=columns, 
+                                         name=name, output=output, set_focus=set_focus, 
+                                         overwrite=overwrite, callback=callback))
 
-    def handle_key_strokes(self, window, specgram):
-        self.current_time=time.time()
-        temp_nfft = None
-        while (self.current_time-self.start) <= specgram.file_length_sec:
-            key = window.getch()
-            if key != -1:
-                with open('cli-log.txt', 'a+') as f:
-                    f.write('[{}]: Key: {}\n'.format(time.time(), key))
-            if key == curses.KEY_RESIZE:
-                temp_nfft = self.handle_resize(window, specgram, specgram.nfft)
-            elif key == curses.KEY_UP:
-                specgram.threshdb+=1
-            elif key == curses.KEY_DOWN:
-                specgram.threshdb-=1
-            elif key == SHIFT_UP:
-                temp_nfft = specgram.nfft
-                temp_nfft += 10
-            elif key == SHIFT_DOWN:
-                temp_nfft = specgram.nfft
-                temp_nfft -= 10
-            elif key == curses.KEY_RIGHT:
-                specgram.markfreq+=200
-            elif key == curses.KEY_LEFT:
-                specgram.markfreq-=200
-            elif key == curses.KEY_PPAGE:
-                self.nav_next_file=True
-                self.stop_at_file=True
-            elif key == curses.KEY_NPAGE:
-                self.nav_prev_file=True
-                self.stop_at_file=True
-            elif key == ESC:
-                self.reset_nav()
-            elif key == ord('C') or key == ord('c'):
-                specgram.display_channel += 1
-            elif key == ord('A') or key == ord('a'):
-                self.skip_minute_bck = True
-                self.stop_at_file=True
-                if key == ord('A'):
-                    self.files_in_tstep = 10 * self.get_num_files_in_min()
-                else:
-                    self.files_in_tstep = self.get_num_files_in_min()
-            elif key == ord('D') or key == ord('d'):
-                self.skip_minute_fwd = True
-                self.stop_at_file=True
-                if key == ord('D'):
-                    self.files_in_tstep = 10 * self.get_num_files_in_min()
-                else:
-                    self.files_in_tstep = self.get_num_files_in_min()
-            elif key == ord('B') or key == ord('b'):
-                self.skip_to_beginning = True
-                self.stop_at_file=True
-            elif key == ord('V') or key == ord('v'):
-                pass
-                # if specgram.show_voltage:
-                #     self.show_voltage=False
-                #     specgram.show_voltage=False
-                #     self.min_width-=voltage_bar_width
-                # else:
-                #     self.show_voltage=True
-                #     specgram.show_voltage=True
-                #     self.min_width+=voltage_bar_width
-            elif key == ord('F') or key == ord('f'):
-                if self.hide_menu:
-                    specgram.max_lines=self.specgram_max_lines
-                    self.hide_menu=False
-                else:
-                    specgram.max_lines=self.specgram_max_lines_no_menu
-                    self.hide_menu=True
-                # next display will recalc line mod   
-                specgram.calc_line_mod=True
-            elif key == ord('D') or key == ord('d'):
-                self.hide_debugger ^= True # will toggle 
-                # next display will recalc line mod   
-                specgram.calc_line_mod=True
-
-            if key != -1:
-                self.key_id=key
-
-            if temp_nfft != None:
-                # next display will recalc line mod   
-                if temp_nfft > 500: 
-                    temp_nfft = 500
-
-                if temp_nfft < 10:
-                    temp_nfft = 10
-
-                self.min_width = int(temp_nfft/2)+extra_column_buffer
-                if self.min_width > self.current_width:
-                    temp_nfft = self.handle_resize(window, specgram, temp_nfft)
-                specgram.nfft = temp_nfft
-
-            specgram.calc_line_mod=True
-
-            self.current_time=time.time()
-        self.start=self.current_time
-
-    def spin(self, window, specgram):
-        self.current_height, self.current_width = window.getmaxyx()
-        self.handle_key_strokes(window, specgram)
-        return(window, specgram)
-
-    def update(self, window, specgram, is_dup, count):
-        if not self.hide_menu:
-            self.display_legend(window, specgram, is_dup, count)
-
-    def display_legend(self, window, specgram, is_dup, count):
-        y_row1, x_col1 = window.getyx()   # | top right corner of col1 info
-        x_col2 = x_col1+33 # y_row1, x_col2 | top right of col2 bar
-        x_col3 = x_col2+27 # y_row1, x_col2 | top right of col3 nav
-
-        window.addstr(' Threshold (dB):    %s'%(str(specgram.threshdb)))
-        window.addstr('\n Sample Rate (Hz):  %s'%(str(specgram.sample_rate)))
-        window.addstr('\n Viewing same file: ')
-        if is_dup:
-            window.addstr(str(is_dup), curses.A_BOLD)
-        else:
-            window.addstr(str(is_dup))
-        window.addstr('\n file: ')
-        window.addstr(str(self.current_file.stem+'.txt'), curses.A_BOLD)
-        window.addstr('\n time: ')
+    def print(self, output, y=None, x=0, end='\n'):
         try:
-            window.addstr(str(unix_epoch_to_local(float(self.current_file.stem)))) # timestamp in filename converted to local time
-        except: # if file name isn't a timestamp or timestamp isn't formatted correctly, don't display time
-            pass
-        window.addstr('\n -----------------------------')
-        window.addstr('\n refresh count: %s'%(str(count)))
-        # self.message_buffer.append('Key ID:   %s'%str(self.key_id))
-        # self.message_buffer.append('Line mod: %s'%str(specgram.line_mod))
-        self.message_buffer.append('max_rows:   {}, rows_shown: {}/{}'.format(specgram.lines_of_data, specgram.lines_of_data, specgram.line_mod))
-        self.message_buffer.append('min_height: {}, min_width:  {}'.format(self.min_height, self.min_width))
-        self.message_buffer.append('max_height: {}, max_width:  {}'.format(self.current_height, self.current_width))
+            self.main_window.print(output=output, x=x, y=y, end=end)
+        except curses.error:
+            self.log(traceback.format_exc())
+            self.log('Current cursor position: y: {}, x: {}'.format(*self.main_window.window.getyx()))
 
-        if not self.hide_debugger:
-            window.addstr('\n debugging message buffer', curses.A_BOLD)
-            count=1
-            for i, msg in reversed(list(enumerate(self.message_buffer))):
-                window.addstr('\n [' + str(i) + '] ' + msg)
-                if count==self.message_buffer_display_limit:
-                    break
-                count+=1
+    def register_keystroke_callable(self, keystroke_callable, update=False):
+        if keystroke_callable.key_id in self.keymap:
+            if not update:
+                return(False)
 
-        window.move(y_row1+1, x_col2) # move to top right corner of col2
+            old_reg = self.keymap[key_id]
+            keystroke_callable.calls.extend(old_reg.calls)
 
-        if self.show_we_skipped_to_beginning:
-            window.addstr('     * Beginning *      ', curses.A_REVERSE | self.color_pair(10))
-        elif self.stop_at_file:
-            window.addstr('    Mode: Navigation    ', curses.A_BOLD | self.color_pair(7))
-        else:
-            window.addstr('    Mode: Streaming     ', self.color_pair(8))
+        self.keymap[keystroke_callable.key_id] = keystroke_callable
+        if not keystroke_callable.case_sensitive:
+            self.keymap[keystroke_callable.switch_case_id()] = keystroke_callable.switch_case()
 
-        y, x = specgram.add_intensity_bar(window, y_row1+3,x_col2)
+        return(True)
 
-        window.move(y_row1, x_col3) # move to top right corner of col3
-        window.addstr(y_row1,x_col3,   'up / down     | adjust threshold (dB)   ')
-        window.addstr(y_row1+1,x_col3, '^up / ^down   | adjust NFFT             ')
-        window.addstr(y_row1+2,x_col3, 'left / right  | adjust freqmarker (Hz)  ')
-        window.addstr(y_row1+3,x_col3, 'pgup / pgdn   | next file/prev file     ')
-        window.addstr(y_row1+4,x_col3, '[A|a] / [D|d] | skip bck/fwd 10/1 min(s)')
-        window.addstr(y_row1+5,x_col3, '----------------------------------------')
-        window.addstr(y_row1+6,x_col3, '[ESC] exit navigation mode and stream   ')
-        window.addstr(y_row1+7,x_col3, '[F|f] toggle full screen                ')
-        window.addstr(y_row1+8,x_col3, '[C|c] cycle through channels            ')
-        window.addstr(y_row1+9,x_col3, '[B|b] go to beginning                   ')
-        window.addstr(y_row1+10,x_col3,'----------------------------------------')
-        window.addstr(y_row1+11,x_col3,'Hit Ctrl + C to Exit', curses.A_BOLD)
+    def register_key(self, key_id, key_name, calls, case_sensitive=True, update=False):
+        new_reg = KeystrokeCallable(key_id=key_id,
+                                    key_name=key_name,
+                                    call=[calls],
+                                    case_sensitive=case_sensitive)
+        return(self.register_keystroke_callable(keystroke_callable=new_reg))
+
+    def spin(self):
+        {panel.redraw_warning() for panel_id, panel in self.panels.items() if panel_id != 'main'}
+        curses.panel.update_panels()
+        self.base_window.refresh()
+        self._handle_keystokes()
+
+    def log(self, output, end='\n'):
+        with open('debug.log', 'a+') as f:
+            f.write('[{}]: {}{}'.format(int(time.time()), output, end))
+
+    def log_keystroke(self, key):
+        with open('keystokes.log', 'a+') as f:
+            f.write('[{}]: {}\n'.format(int(time.time()), key.key_name))
+
+    @classmethod
+    def get_replacement_window(cls, window_dimensions):
+        window = curses.newwin(window_dimensions.rows,
+                               window_dimensions.columns,
+                               window_dimensions.y,
+                               window_dimensions.x)
+        return(window)
+
+    def _init_panel(self, window_dimensions=None, callback=[]):
+        if window_dimensions == None:
+            rows, columns = get_term_size()
+            window_dimensions = WindowDimensions(x=0, y=0, rows=rows, columns=columns)
+
+        window = curses.newwin(window_dimensions.rows,
+                               window_dimensions.columns,
+                               window_dimensions.y,
+                               window_dimensions.x)
+        panel = curses.panel.new_panel(window)
+
+        return(PanelManager(window=window,
+                            panel=panel,
+                            window_dimensions=window_dimensions,
+                            callback=callback))
+
+    def _handle_keystokes(self):
+        start = time.time()
+        while time.time() - start <= self.refresh_rate:
+            key = self.base_window.getch()
+            if key != -1:
+                if key in self.keymap:
+                    [func(self.keymap[key]) for func in self.keymap[key].call]
+
+                try:
+                    self.log_keystroke(self.keymap[key])
+                except KeyError:
+                    self.log_keystroke(KeystrokeCallable(key_id=-1,
+                                                         key_name='ERROR Unregistered key: {}'.format(key),
+                                                         call=[],
+                                                         case_sensitive=True))
+
+    def _kill(self, *arg):
+        raise KeyboardInterrupt
+
+
+
+
+
+def test(stdscr):
+    ui = Ui(stdscr=stdscr)
+    i = 0
+    while True:
+        if i >= 3:
+            pan = curses.panel.bottom_panel()
+            pan.hide()
+            ui.spin()
+        win_name = 'Test_{}'.format(i)
+        ui.new_window(3+i, 3+i, 30, 50, win_name, 'This is a test!')
+        i+=1
+        ui.panels[win_name].add_border()
+        ui.panels[win_name].print(time.time())
+        ui.spin()
+
+if __name__ == '__main__':
+    try:
+        curses.wrapper(test)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print('\n\tExiting...\n')
