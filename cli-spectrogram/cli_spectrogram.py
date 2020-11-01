@@ -39,7 +39,7 @@ def run_cli(ui, specgram):
 
 def handle_config(args):
     import json
-    config_file = os.getenv('_DAQ_CONFIG')
+    config_file = os.getenv('DAQ_CONFIG')
     if config_file != None:
         with open(config_file, 'r') as f:
             data = json.load(f)
