@@ -35,15 +35,6 @@ from common import (
 def run_cli(ui, specgram):
     i = 0
     while True:
-        # if i >= 3:
-        #     pan = curses.panel.bottom_panel()
-        #     pan.hide()
-        #     ui.spin()
-        # win_name = 'Test_{}'.format(i)
-        # ui.new_window(3+i, 3+i, 30, 50, win_name, 'This is a test!')
-        # i+=1
-        # ui.panels[win_name].add_border()
-        # ui.panels[win_name].print(time.time())
         ui.spin()
 
 def main(stdscr):
