@@ -73,7 +73,7 @@ class Ui(object):
                                                            case_sensitive=True))
         self.register_keystroke_callable(KeystrokeCallable(key_id=curses.KEY_RESIZE,
                                                            key_name='RESIZE',
-                                                           call=[self.log_keystroke, self.handle_resize, self.handle_refit],
+                                                           call=[self.log_keystroke, self.handle_refit, self.handle_resize],
                                                            case_sensitive=True))
             
     def get_panel_mode(self):
@@ -93,7 +93,7 @@ class Ui(object):
         if state_just_changed:
             plot.fill_screen = self._overlap_mode
             if self._overlap_mode:
-                # refit plot to window
+                # refit plot to window by recalling last saved plot
                 plot.replace(self.get_saved_window(plot_name))
             else:
                 self.save_window(plot_name)
@@ -125,11 +125,8 @@ class Ui(object):
         new_win = get_fitted_window(self.legend_managers)
         self.log(new_win.data)
         self.log('plot panel: {}'.format(plot.window_dimensions.data))
-        # self.log('legend 1 panel: {}'.format(legend_panels[0].window_dimensions.data))
-        # self.log('legend 2 panel: {}'.format(legend_panels[1].window_dimensions.data))
         if plot.window_dimensions != new_win:
             plot.resize(new_win)
-            # plot.replace(self.get_replacement_window(window_dimensions=new_win))
 
     def new_corner_window(self, corner, rows, columns, name, 
                           output=None, set_focus=True, 
@@ -294,11 +291,16 @@ class Ui(object):
             key = self.base_window.getch()
             if key != -1:
                 if key in self.keymap:
+                    start = time.time()
                     [func(self.keymap[key]) for func in self.keymap[key].call]
+                    stop = time.time()
+                    self.log_keystroke(KeystrokeCallable(key_id=self.keymap[key].key_id,
+                                                         key_name='Timer for: {} --> {} seconds'.format(self.keymap[key].key_name,
+                                                                                                        '%.3f' % (stop - start)),
+                                                         call=[],
+                                                         case_sensitive=True))
 
-                try:
-                    self.log_keystroke(self.keymap[key])
-                except KeyError:
+                if key not in self.keymap:
                     self.log_keystroke(KeystrokeCallable(key_id=-1,
                                                          key_name='ERROR Unregistered key: {}'.format(key),
                                                          call=[],
