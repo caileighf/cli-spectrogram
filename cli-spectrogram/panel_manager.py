@@ -95,6 +95,7 @@ class LegendManager(object):
             p.border_on = False
 
     def is_hidden(self):
+        # returns True is ALL panels in legend are hidden
         for p in self.panels:
             if not p.is_hidden():
                 return(False)
@@ -108,7 +109,6 @@ class LegendManager(object):
 
     def toggle_panel(self, index):
         self.panels[index].toggle_visibility()
-        self.panels[index].refresh()
 
     def toggle_all(self):
         [p.toggle_visibility() for p in self.panels]
@@ -267,8 +267,6 @@ class PanelManager(object):
             try:
                 self.move(x=self.window_dimensions.x, y=self.window_dimensions.y)
             except ValueError:
-                from ui import Ui
-                self.replace(Ui.get_replacement_window(self.window_dimensions))
                 return
 
         elif self.fill_screen:
@@ -298,7 +296,7 @@ class PanelManager(object):
         self.buffer = []
 
     def hard_clear(self):
-        self.window.clear()
+        pass
 
     def printch(self, ch, attr=None, color=1):
         try:
@@ -367,7 +365,6 @@ class PanelManager(object):
             self.log('User tried to resize window too fast! \n{}'.format(traceback.format_exc()))
             raise ValueError('x or y value would put the window off screen!')
         else:
-            self.refresh()
             self.redraw_buffer()
 
     def hline(self, ch='-'):
@@ -413,7 +410,6 @@ class PanelManager(object):
             self.show()
         else:
             self.hide()
-        self.refresh()
 
     def snap_back(self):
         if self.corner != None:
