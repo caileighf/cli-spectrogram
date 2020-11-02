@@ -25,7 +25,11 @@ from common import (
         LEFT,
         RIGHT,
         STANDOUT_GREEN,
-        STANDOUT_RED
+        STANDOUT_RED,
+        SPLIT_V_STACK,
+        SPLIT_H_STACK,
+        SINGLE_V,
+        SINGLE_H
     )
 import sys
 import numpy
@@ -53,12 +57,9 @@ class Specgram(object):
     """docstring for Specgram
 
     """
-    def __init__(self, window, 
-                       upper_legend,
-                       lower_legend,
-                       source,
+    def __init__(self, source,
                        register_keystroke_callable,
-                       file_manager,
+                       ui,
                        device_name,
                        display_channel=0, 
                        threshold_db=90, 
@@ -68,22 +69,13 @@ class Specgram(object):
                        sample_rate=19200,
                        file_length=1.0):
         super(Specgram, self).__init__()
-        self.window = window
-        self.legend = upper_legend
-        self.lower_legend = lower_legend
+        self.ui = ui # ui instance for creating plot window and legend windows
+        self.window = ui.new_full_size_window(name='specgram_plot')
         self.first_draw = False
         self.force_redraw = True
         self.window.add_callback(self.redraw_specgram)
         self.window.fill_screen = True
         self.window.on_state_change.append(self.handle_plot_state_change)
-        self.legend.add_callback(self.redraw_upper_legend)
-        self.lower_legend.add_callback(self.redraw_lower_legend)
-        self.legend.border_on = True
-        self.lower_legend.border_on = True
-        self.legend.corner = TOP_RIGHT
-        self.lower_legend.corner = BOTTOM_RIGHT
-        self.legend.sticky_sides = True
-        self.lower_legend.sticky_sides = True
 
         self.max_rows = self.window.rows
         self.max_columns = self.window.columns
@@ -105,12 +97,28 @@ class Specgram(object):
         self.argmax_freq = 0
 
         self.full_screen_mode = False
-        self.file_manager = file_manager
+        self.file_manager = FileNavManager(data_dir=self.source)
         self.current_file = self.file_manager.next_file()
         self.device_name = device_name
         self.data = []
         self._init_keymap()
         self.handle_plot_state_change(event='INITIAL_RESIZE')
+
+        self.legend = ui.new_legend(name='specgram_legend', 
+                                    num_panels=2, 
+                                    get_legend_dict=self.legend_data, 
+                                    type_=SPLIT_V_STACK, 
+                                    shared_dimension=50, 
+                                    side=RIGHT)
+
+        with open('_debug.log', 'a+') as f:
+            output = '<<<<<<<'
+            for i, p in enumerate(self.legend.panels):
+                output += '\n[{}]: Corner type: {}'.format(i, p.corner)
+                output += '\n      columns: {}'.format(p.columns)
+                output += '\n      __dict__.panel: {}'.format(p.__dict__)
+            output += '\n>>>>>>>\n'
+            f.write(output)
 
     def _init_keymap(self):
         self.keymap = [
@@ -182,7 +190,9 @@ class Specgram(object):
         for key in self.keymap:
             self.register_keystroke_callable(keystroke_callable=key, update=True)
 
-    @property
+    def close(self):
+        self.file_manager.close()
+
     def legend_data(self):
         return({
                 'UPPER': {
@@ -201,8 +211,10 @@ class Specgram(object):
                     },
                     '__channel_bar__':
                         self.create_channel_bar(),
-                    '__mode_bar__': 
-                        self.create_mode_bar(),
+                    '__nav_mode_bar__': 
+                        self.create_nav_mode_bar(),
+                    '__plot_mode_bar__':
+                        self.create_plot_mode_bar(),
                     '__intensity_bar__': 
                         self.create_intensity_bar(),
                 },
@@ -211,20 +223,21 @@ class Specgram(object):
                         'Up / Down': 'Adjust color threshold by +/-{}dB'.format(self.threshold_steps),
                         'Shift + (Up / Down)': 'Adjust NFFT by +/-{}'.format(self.nfft_step),
                         'Left / Right': 'Move mark frequency by +/-100Hz',
-                        '__hline00__': self.lower_legend.hline(ch=' '),
+                        '__hline00__': self.legend.hline(ch=' '),
                         'C / c': 'Cycle through channels',
-                        '__hline01__': self.lower_legend.hline(ch=' '),
+                        '__hline01__': self.legend.hline(ch=' '),
                         'Pg Up / Pg Down': 'Previous file / Next file',
                         'A / a': 'Move backwards 60 seconds / 10 seconds',
                         'D / d': 'Move forwards 60 seconds / 10 seconds',
                         'B / b': 'Jump to beginning of dataset',
                         'E / e': 'Jump to end of dataset',
                         'Escape': 'Resume streaming',
-                        '__hline02__': self.lower_legend.hline(ch=' '),
+                        '__hline02__': self.legend.hline(ch=' '),
                         'Shift + Left': 'Move legend left',
                         'Shift + Right': 'Move legend right',
                         'H / h': 'Toggle keyboard shortcuts on / off',
                         'F / f': 'Toggle full screen on / off',
+                        'X / x': 'Toggle Stacked / Best Fit panels',
                     },
                     # 'Legend Panel Info': {
                     #     'x': self.legend.window_dimensions.x,
@@ -288,10 +301,8 @@ class Specgram(object):
     def handle_move_legend(self, key):
         if key.key_id == SHIFT_LEFT:
             self.legend.move_left()
-            self.lower_legend.move_left()
         else:
             self.legend.move_right()
-            self.lower_legend.move_right()
 
     def create_dataset_position_bar(self):
         if self.file_manager.is_streaming():
@@ -343,7 +354,21 @@ class Specgram(object):
         channel_bar.extend(bottom_bar)
         return(channel_bar)
 
-    def create_mode_bar(self):
+    def create_plot_mode_bar(self):
+        mode_bar = []
+        if self.ui.get_panel_mode() == 'Stacked':
+            color = COLOR_YELLOW
+        elif self.ui.get_panel_mode() == 'Best Fit':
+            color = COLOR_GREEN
+        else:
+            color = COLOR_RED
+        mode_bar.extend([
+                CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(self.legend.columns), 
+                    fg=-1, bg=color, attr=A_BOLD),
+            ])
+        return(mode_bar)
+
+    def create_nav_mode_bar(self):
         mode_bar = []
         if self.file_manager.state == 'Streaming':
             color = COLOR_GREEN
@@ -352,7 +377,7 @@ class Specgram(object):
         else:
             color = COLOR_RED
         mode_bar.extend([
-                CursesPixel(text='Mode: {}'.format(self.file_manager.state).center(self.legend.columns), 
+                CursesPixel(text='Nav Mode: {}'.format(self.file_manager.state).center(self.legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
         return(mode_bar)
@@ -395,69 +420,33 @@ class Specgram(object):
     def handle_plot_state_change(self, event):
         if event == 'RESIZE' or event == 'INITIAL_RESIZE':
             # see if we can expand the plot to fit the window
-            self.handle_nfft(self.window.columns, expand=True)
+            self.handle_nfft(expand=True)
+
+    def get_plot_dimensions(self):
+        if not self.window.fill_screen:
+            return(self.window.rows, self.window.columns)
+        return(self.window.term_size)
 
     def full_screen(self, args):
-        if self.lower_legend.is_hidden() or self.legend.is_hidden():
-            self.lower_legend.show()
-            self.legend.show()
+        self.full_screen_mode ^= True # toggle
+        if self.full_screen_mode:
+            self.legend.hide_all()
         else:
-            self.lower_legend.hide()
-            self.legend.hide()
-
-    def toggle_legend(self, args):
-        self.lower_legend.toggle_visibility()
+            self.legend.show_all()
         self.window.refresh()
 
-    def redraw_lower_legend(self, term_size):
-        self.redraw_legend(legend_data=self.legend_data['LOWER'], term_size=term_size, is_upper=False)
+    def toggle_legend(self, args):
+        self.legend.toggle_bottom()
+        self.window.refresh()
 
-    def redraw_upper_legend(self, term_size):
-        self.redraw_legend(legend_data=self.legend_data['UPPER'], term_size=term_size, is_upper=True)
-
-    def redraw_legend(self, legend_data, term_size, is_upper):
-        if is_upper:
-            legend = self.legend 
-        else:
-            legend = self.lower_legend
-
-        if legend.is_hidden():
-            return
-
-        legend.clear_buffer()
-        legend.buffer.append([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_NORMAL)])
-        for outer_k, outer_v in legend_data.items():
-            # if key starts with __ that means it's already a list of curses pixels so append as is
-            if outer_k[:2] == '__':
-                legend.buffer.append(outer_v)
-                continue
-
-            legend.buffer.append([
-                    CursesPixel(text=' {}'.format(outer_k).center(legend.columns - 1), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                ])
-            legend.buffer.append(legend.hline())
-            for k, v in outer_v.items():
-                if k[:2] == '__':
-                    legend.buffer.append(v)
-                    continue
-
-                legend.buffer.append([
-                        CursesPixel(text='  {}: '.format(k), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                        CursesPixel(text='{}'.format(v), fg=-1, bg=COLOR_BLACK, attr=A_NORMAL)
-                    ])
-            if k[:2] != '__': legend.buffer.append(legend.hline(ch=' '))
-
-        # if '2.7' not in sys.version:
-        #     legend.hard_clear()
-
-    def redraw_specgram(self, term_size):
+    def redraw_specgram(self, *args):
         if self.file_manager.next_file() == self.current_file:
             if not self.first_draw:
                 self.first_draw = True
             elif not self.force_redraw:
                 return
 
-        formatted_data = self.format_data(term_size)
+        formatted_data = self.format_data(self.get_plot_dimensions())
         self.window.clear_buffer()
         for row in formatted_data:
             self.window.buffer.append(row)
@@ -515,19 +504,29 @@ class Specgram(object):
         x_axis['info_row'], x_axis['border_row'] = zip(*zip(x_axis['info_row'], x_axis['border_row']))
         return(x_axis)
 
-    def handle_nfft(self, max_columns, expand=False):
-        if max_columns < ((self.nfft / 2) + self.vertical_axis_width):
+    def handle_nfft(self, expand=False):
+        old_nfft = self.nfft
+        if self.window.columns < ((self.nfft / 2) + self.vertical_axis_width):
             # we need to make nfft smaller
-            while max_columns < ((self.nfft / 2) + self.vertical_axis_width):
+            while self.window.columns < ((self.nfft / 2) + self.vertical_axis_width):
                 self.nfft -= self.nfft_step
 
         elif expand:
             # we can make it bigger!
-            while max_columns > ((self.nfft / 2) + self.vertical_axis_width):
+            while self.window.columns > ((self.nfft / 2) + self.vertical_axis_width):
                 self.nfft += self.nfft_step
-                if max_columns < ((self.nfft / 2) + self.vertical_axis_width):
+                if self.window.columns < ((self.nfft / 2) + self.vertical_axis_width):
                     self.nfft -= self.nfft_step
                     break
+
+        with open('_debug.log', 'a+') as f:
+            output = '!!!!!!!!!!!!!!!!'
+            output += '\n nfft (new/old): {}/{}'.format(self.nfft, old_nfft)
+            output += '\n first condition: {}'.format(self.window.columns < ((self.nfft / 2) + self.vertical_axis_width))
+            output += '\n second condition: {}'.format(expand)
+            output += '\n ---> rows, columns: ({}, {})'.format(self.window.rows, self.window.columns)
+            output += '\n!!!!!!!!!!!!!!!\n'
+            f.write(output)
 
     def format_x_axis_pixels(self, line, attr):
         formatted_row = []
@@ -536,12 +535,11 @@ class Specgram(object):
         return(formatted_row)
 
     def format_data(self, term_size):
-        max_rows, max_columns = term_size
         # make sure nfft will work for current term size
-        self.handle_nfft(max_columns)
+        self.handle_nfft()
         # create matrix with color for dB intensity that fits in alloted rows
         try:
-            axis, rows = self.fit_data(max_rows, *self.create_specgram())
+            axis, rows = self.fit_data(*self.create_specgram())
         except ValueError:
             # TODO handle values too low error with popup error
             return([])
@@ -603,9 +601,9 @@ class Specgram(object):
 
         return(results)
 
-    def fit_data(self, max_rows, axis, rows):
-        return(self.downsample_to_max(axis, max_rows - 5), 
-               self.downsample_to_max(rows, max_rows - 5))
+    def fit_data(self, axis, rows):
+        return(self.downsample_to_max(axis, self.window.columns), 
+               self.downsample_to_max(rows, self.window.columns))
 
     def create_specgram(self):
         done = False

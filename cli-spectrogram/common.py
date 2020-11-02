@@ -55,22 +55,126 @@ curses.init_pair(51, curses.COLOR_RED, -1)
 # curses.init_pair(curses.COLOR_MAGENTA, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
 # curses.init_pair(curses.COLOR_RED,     curses.COLOR_RED, curses.COLOR_BLACK)
 
-TOP_LEFT = 0
-TOP_RIGHT = 1
-BOTTOM_LEFT = 2
-BOTTOM_RIGHT = 3
-TOP = 4
-BOTTOM = 5
-LEFT = 6
-RIGHT = 7
+TOP    = 0
+BOTTOM = 1
+LEFT   = 2
+RIGHT  = 3
+
+TOP_LEFT  = 4
+TOP_RIGHT = 5
+
+BOTTOM_LEFT  = 6
+BOTTOM_RIGHT = 7
+
+SPLIT_V_STACK = 0
+SPLIT_H_STACK = 1
+SINGLE_V = 2
+SINGLE_H = 3
+
+POTENTIAL_POSITIONS = [TOP, BOTTOM, LEFT, RIGHT, TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT]
 
 CursesPixel = namedtuple('CursesPixel', ['text', 'fg', 'bg', 'attr'])
-WindowDimensions = namedtuple('WindowDimensions', ['x', 'y', 'rows', 'columns'])
 Line = namedtuple('Line', ['data', 'attr_mask'])
+
+def accumulate(x, l=[0]): l[0] += x; return l[0];
+
+def get_max(panels, target_attr=[], lateral=True):
+    if lateral:
+        results = [p.columns for p in panels if p.corner == RIGHT] # in target_attr]
+    else:
+        results = [p.rows for p in panels if p.corner in target_attr]
+
+    try:
+        result = max(results)
+    except ValueError:
+        with open('_debug.log', 'a+') as f:
+            output = ''
+            for p in panels:
+                output += ', '.join(p.dict_buffer.keys())
+                output += '\nresults: {}'.format(results)
+                # output += '\n'
+                # output += ', '.join(str(p.dict_buffer.values()))
+                output += '\nColumns: {}'.format(p.columns)
+                output += '\nRows: {}'.format(p.rows)
+                output += '\nActual Corner Type: {}'.format(p.corner)
+                output += '\nis corner valid?: {}\n\n----\n'.format(p.corner in POTENTIAL_POSITIONS)
+
+            f.write('failed! \nattrs tested: {}\nattrs in panels: {}\n'.format(target_attr, output))
+            f.write('\n{}\n'.format(traceback.format_exc()))
+        return(0)
+    return(result)
+
+def get_fitted_window(legend_managers):
+    minus_top, minus_bottom = (0, 0)
+    minus_left, minus_right = (0, 0)
+    for legend in legend_managers.values():
+        # find delta from each side
+        minus_right  += legend.get_total_width(side=RIGHT)  #get_max(panels=panels, target_attr=[RIGHT, TOP_RIGHT, BOTTOM_RIGHT])
+        minus_left   += legend.get_total_width(side=LEFT)  #get_max(panels=panels, target_attr=[LEFT, TOP_LEFT, BOTTOM_LEFT])
+        minus_top    += legend.get_total_height(side=TOP)  #get_max(panels=panels, target_attr=[TOP], lateral=False)
+        minus_bottom += legend.get_total_height(side=BOTTOM) #get_max(panels=panels, target_attr=[BOTTOM], lateral=False)
+
+    # minus_right = max([l.columns for l in panels if l.corner == RIGHT or\
+    #                                                 l.corner == TOP_RIGHT or\
+    #                                                 l.corner == BOTTOM_RIGHT])
+    # minus_left = max([l.columns for l in panels if l.corner == LEFT or\
+    #                                                l.corner == TOP_LEFT or\
+    #                                                l.corner == BOTTOM_LEFT])
+    # minus_top = max([l.rows for l in panels if l.corner == TOP])
+    # minus_bottom = max([l.rows for l in panels if l.corner == BOTTOM])
+
+    x, y = (0, 0)
+    # find (x, y) for new plot win
+    x += minus_left
+    y += minus_top
+
+    max_rows, max_columns = get_term_size()
+    max_rows -= minus_top + minus_bottom
+    max_columns -= minus_left + minus_right
+
+    with open('_debug.log', 'a+') as f:
+        f.write('\n\n--------------\nminus_right: {}'.format(minus_right))
+        f.write('\nminus_left: {}'.format(minus_left))
+        f.write('\nminus_top: {}'.format(minus_top))
+        f.write('\nminus_bottom: {}\n//////\n'.format(minus_bottom))
+        f.write('\nx, y: ({}, {})\n'.format(x, y))
+        f.write('\nNEW: rows, columns: ({}, {})\n'.format(max_rows, max_columns))
+        output = '&&&&&'
+        # for i, p in enumerate(panels):
+        #     output += '\n[{}]: All Corner Types: {}'.format(i, p.corner)
+            # output += '\n      __dict__.panel: {}'.format(p.__dict__)
+        output += '\n&&&&&\n'
+        f.write(output)
+
+    return(WindowDimensions(x=x, y=y, 
+                            rows=max_rows,
+                            columns=max_columns))
 
 def get_term_size():
     rows, columns = os.popen('stty size', 'r').read().split()
     return(int(rows), int(columns))
+
+class WindowDimensions(object):
+    """docstring for WindowDimensions"""
+    def __init__(self, rows, columns, x=0, y=0):
+        super(WindowDimensions, self).__init__()
+        self.x = int(x)
+        self.y = int(y)
+        self.rows = int(rows)
+        self.columns = int(columns)
+
+    @property
+    def data(self):
+        return('x = {}, y = {}, rows = {}, columns = {}'.format(self.x, self.y, self.rows, self.columns))
+        
+    def __eq__(self, compare):
+        if compare != None and\
+           self.x == compare.x and\
+           self.y == compare.y and\
+           self.rows == compare.rows and\
+           self.columns == compare.columns:
+            return(True)
+        return(False)
 
 class KeystrokeCallable(object):
     """docstring for KeystrokeCallable"""
