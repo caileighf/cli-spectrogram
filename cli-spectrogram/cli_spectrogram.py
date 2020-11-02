@@ -77,20 +77,12 @@ def main(stdscr):
     if args.use_config:
         args = handle_config(args)
 
-    ui = Ui(stdscr=stdscr)
-    plot_win = ui.new_full_size_window(name='specgram_plot')
-    # legend_win = ui.new_window(x=2, y=5, rows=12, columns=50, name='specgram_legend')
-    upper_legend = ui.new_corner_window(corner=TOP_RIGHT, rows=30, columns=50, name='specgram_upper_legend')
-    lower_legend = ui.new_corner_window(corner=BOTTOM_RIGHT, rows=30, columns=50, name='specgram_lower_legend')
-    file_manager = FileNavManager(data_dir=args.source)
-    specgram = Specgram(window=plot_win, 
-                        upper_legend=upper_legend,
-                        lower_legend=lower_legend,
-                        source=args.source,
+    ui = Ui(stdscr=stdscr, refresh_hz=args.file_length)
+    specgram = Specgram(source=args.source,
                         register_keystroke_callable=ui.register_keystroke_callable,
-                        file_manager=file_manager,
+                        ui=ui,
                         display_channel=args.display_channel,
-                        device_name=args.device_name, 
+                        device_name=args.device_name,
                         threshold_db=args.threshold_db, 
                         markfreq_hz=args.markfreq_hz, 
                         threshold_steps=args.threshold_steps, 
@@ -101,7 +93,7 @@ def main(stdscr):
         run_cli(ui=ui,
                 specgram=specgram)
     finally:
-        file_manager.close()
+        specgram.close()
 
 if __name__ == '__main__':
     try:
