@@ -48,13 +48,6 @@ curses.init_pair(curses.COLOR_RED,     curses.COLOR_BLACK, curses.COLOR_RED)
 curses.init_pair(50, curses.COLOR_GREEN, -1)
 curses.init_pair(51, curses.COLOR_RED, -1)
 
-# curses.init_pair(curses.COLOR_BLUE,    curses.COLOR_BLUE, curses.COLOR_BLACK)
-# curses.init_pair(curses.COLOR_CYAN,    curses.COLOR_CYAN, curses.COLOR_BLACK)
-# curses.init_pair(curses.COLOR_GREEN,   curses.COLOR_GREEN, curses.COLOR_BLACK)
-# curses.init_pair(curses.COLOR_YELLOW,  curses.COLOR_YELLOW, curses.COLOR_BLACK)
-# curses.init_pair(curses.COLOR_MAGENTA, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
-# curses.init_pair(curses.COLOR_RED,     curses.COLOR_RED, curses.COLOR_BLACK)
-
 TOP    = 0
 BOTTOM = 1
 LEFT   = 2
@@ -95,7 +88,7 @@ def get_fitted_window(legend_managers):
     max_rows, max_columns = get_term_size()
     max_rows -= minus_top + minus_bottom
     max_columns -= minus_left + minus_right
-
+    
     return(WindowDimensions(x=x, y=y, 
                             rows=max_rows,
                             columns=max_columns))

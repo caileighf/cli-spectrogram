@@ -110,15 +110,8 @@ class Specgram(object):
                                     type_=SPLIT_V_STACK, 
                                     shared_dimension=50, 
                                     side=RIGHT)
-
-        with open('_debug.log', 'a+') as f:
-            output = '<<<<<<<'
-            for i, p in enumerate(self.legend.panels):
-                output += '\n[{}]: Corner type: {}'.format(i, p.corner)
-                output += '\n      columns: {}'.format(p.columns)
-                output += '\n      __dict__.panel: {}'.format(p.__dict__)
-            output += '\n>>>>>>>\n'
-            f.write(output)
+        self.legend.set_x_label('Frequency (Hz)')
+        self.legend.set_y_label('Time (relative to file start)')
 
     def _init_keymap(self):
         self.keymap = [
@@ -190,33 +183,37 @@ class Specgram(object):
         for key in self.keymap:
             self.register_keystroke_callable(keystroke_callable=key, update=True)
 
+    def log(self, output, end='\n'):
+        with open('debug.log', 'a+') as f:
+            f.write('[{}]: {}{}'.format(int(time.time()), output, end))
+
     def close(self):
         self.file_manager.close()
 
     def legend_data(self):
-        return({
+        legend_dict = {
                 'UPPER': {
                     'File Information': {
                         'File': self.file_manager.current_file.name,
                         'Time': self.get_formatted_dt(),
                         'Device Name': self.device_name,
-                        '__dataset_position_marker__':
-                            self.create_dataset_position_bar(),
                     },
                     'Spectrogram Information': {
                         'Threshold (dB)': self.threshold_db,
                         'Sample Rate (Hz)': self.sample_rate,
                         'Max Freq': self.argmax_freq,
                         'NFFT': self.nfft,
+                        'Vertical Axis': self.legend.y_label,
+                        'Horizontal Axis': self.legend.x_label,
+                        '__channel_bar__':
+                            self.create_channel_bar(),
+                        '__nav_mode_bar__': 
+                            self.create_nav_mode_bar(),
+                        '__plot_mode_bar__':
+                            self.create_plot_mode_bar(),
+                        '__intensity_bar__': 
+                            self.create_intensity_bar(),
                     },
-                    '__channel_bar__':
-                        self.create_channel_bar(),
-                    '__nav_mode_bar__': 
-                        self.create_nav_mode_bar(),
-                    '__plot_mode_bar__':
-                        self.create_plot_mode_bar(),
-                    '__intensity_bar__': 
-                        self.create_intensity_bar(),
                 },
                 'LOWER': {
                     'Keyboard Shortcuts': {
@@ -237,10 +234,30 @@ class Specgram(object):
                         'Shift + Right': 'Move legend right',
                         'H / h': 'Toggle keyboard shortcuts on / off',
                         'F / f': 'Toggle full screen on / off',
-                        'X / x': 'Toggle Stacked / Best Fit panels',
+                        'X / x': 'Toggle window mode Stacked / Best Fit',
                     },
-                }
-        })
+                },
+                '__minimal__': {
+                    'Spectrogram Information': {
+                        'Threshold (dB)': self.threshold_db,
+                        'Sample Rate (Hz)': self.sample_rate,
+                        'Max Freq': self.argmax_freq,
+                        'NFFT': self.nfft,
+                        '__channel_bar__':
+                            self.create_channel_bar(),
+                        '__nav_mode_bar__': 
+                            self.create_nav_mode_bar(),
+                        '__intensity_bar__': 
+                            self.create_intensity_bar(),
+                    },
+                },
+            }
+
+        # parts of legend that are modal
+        if self.file_manager.state != 'Streaming':
+            legend_dict['UPPER']['File Information']['__dataset_position_marker__'] = self.create_dataset_position_bar()
+        
+        return(legend_dict)
 
     def handle_config(self, key):
         pass
@@ -328,7 +345,7 @@ class Specgram(object):
         bottom_bar = []
         chan_str = ' Channel: '
         available_width = self.legend.columns - len(chan_str)
-        top_bar.append(CursesPixel(text='{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=STANDOUT_GREEN))
+        top_bar.append(CursesPixel(text='\n{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=STANDOUT_GREEN))
         bottom_bar.append(CursesPixel(text=' ' * len(chan_str), fg=-1, attr=A_BOLD, bg=COLOR_BLACK))
         for i in range(self.available_channels):
             top_bar.append(
@@ -390,12 +407,13 @@ class Specgram(object):
                 CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=COLOR_RED, attr=A_BOLD),
                 CursesPixel(text=' ', fg=-1, bg=COLOR_RED, attr=A_BOLD),
             ])
-        lower_bound = '  {}dB'.format(self.threshold_db - self.threshold_steps * 2)
-        upper_bound = '{}dB    '.format(self.threshold_db + self.threshold_steps * 2)
+        lower_bound = ' {}dB'.format(self.threshold_db - self.threshold_steps * 2)
+        current_dB = '{}dB'.format(self.threshold_db)
+        upper_bound = '{}dB '.format(self.threshold_db + self.threshold_steps * 2)
         intensity_bar.extend([
-                CursesPixel(text=lower_bound.ljust(int(self.legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text='{}dB'.format(self.threshold_db), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text=upper_bound.rjust(int(self.legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=lower_bound.ljust(int(self.legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=current_dB.center(int(self.legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=upper_bound.rjust(int(self.legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
             ])
         intensity_bar.extend([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)])
         return(intensity_bar)
@@ -511,15 +529,6 @@ class Specgram(object):
                 if self.window.columns < ((self.nfft / 2) + self.vertical_axis_width):
                     self.nfft -= self.nfft_step
                     break
-
-        with open('_debug.log', 'a+') as f:
-            output = '!!!!!!!!!!!!!!!!'
-            output += '\n nfft (new/old): {}/{}'.format(self.nfft, old_nfft)
-            output += '\n first condition: {}'.format(self.window.columns < ((self.nfft / 2) + self.vertical_axis_width))
-            output += '\n second condition: {}'.format(expand)
-            output += '\n ---> rows, columns: ({}, {})'.format(self.window.rows, self.window.columns)
-            output += '\n!!!!!!!!!!!!!!!\n'
-            f.write(output)
 
     def format_x_axis_pixels(self, line, attr):
         formatted_row = []

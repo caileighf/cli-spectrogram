@@ -40,7 +40,7 @@ class Ui(object):
 
     The Ui class manages all things related to curses and what is displayed
     """
-    def __init__(self, stdscr, refresh_hz=1):
+    def __init__(self, stdscr, refresh_hz=0):
         super(Ui, self).__init__()
         self.base_window = stdscr
         self.refresh_rate = refresh_hz
@@ -181,15 +181,6 @@ class Ui(object):
                                           columns=columns, 
                                           name='{}_section_{}'.format(name, i),
                                           corner=side))
-            with open('_debug.log', 'a+') as f:
-                output = '&&&&&&&&&&&&&&&&&&&'
-                p = panels[-1]
-                output += '\n[{}]: Corner type: {}, passed: {}'.format(i, p.corner, side)
-                output += '\n      columns: {}'.format(p.columns)
-                output += '\n      name: {}'.format('{}_section_{}'.format(name, i))
-                output += '\n      __dict__.panel: {}'.format(p.__dict__)
-                output += '\n&&&&&&&&&&&&&&&&&&&\n'
-                f.write(output)
 
         self.legend_managers[name] = LegendManager(panels, get_legend_dict, type_)
         return(self.legend_managers[name])
@@ -204,7 +195,7 @@ class Ui(object):
                 return(None)
             else:
                 win = self._init_panel(WindowDimensions(x=x, y=y, rows=rows, columns=columns), corner=corner)
-                self.panels[name].replace(window=win)
+                self.panels[name].replace(window=win.window)
         else:
             self.panels[name] = self._init_panel(WindowDimensions(x=x, y=y, rows=rows, columns=columns), corner=corner)
 
@@ -314,18 +305,38 @@ class Ui(object):
 
 
 def test(stdscr):
+    import random
+
     ui = Ui(stdscr=stdscr)
     i = 0
+    step = 1
     while True:
-        if i >= 3:
-            pan = curses.panel.bottom_panel()
-            pan.hide()
-            ui.spin()
+        start = time.time()
+        rows, columns = get_term_size()
         win_name = 'Test_{}'.format(i)
-        ui.new_window(3+i, 3+i, 30, 50, win_name, 'This is a test!')
-        i+=1
-        ui.panels[win_name].add_border()
-        ui.panels[win_name].print(time.time())
+        if i >= 5:
+            pan = curses.panel.bottom_panel()
+            if pan != None:
+                pan.hide()
+                ui.spin()
+        if i != 0 and i % 15 == 0:
+            i = random.randint(0, 30)
+            if i % 2 == 0:
+                step = 1
+            else:
+                step = -1
+
+        try:
+            ui.new_window(4+i, 3+i, 20, 50, win_name, overwrite=True)
+        except curses.error:
+            i = rows / 2
+            step = 1
+        else:
+            i += step
+            ui.panels[win_name].border()
+            stop = time.time()
+            ui.panels[win_name].print('This is a test! i = {}'.format(i))
+            ui.panels[win_name].print('Duration: {} seconds'.format(stop - start))
         ui.spin()
 
 if __name__ == '__main__':
@@ -335,29 +346,3 @@ if __name__ == '__main__':
         pass
     finally:
         print('\n\tExiting...\n')
-
-
-
-
-        # # for each legend we shave down fitted height and width and set new x/y (if needed)
-        #     if legend.corner == TOP or legend.corner == TOP_LEFT or legend.corner == LEFT:
-        #         # (x, y) touches top left corner 
-        #         # move x, y inward and shrink height/width
-        #         if legend.corner == TOP or legend.corner == TOP_LEFT:
-        #             y += legend.rows
-        #             fitted_height -= legend.rows
-                
-        #         if legend.corner == TOP_LEFT or legend.corner == LEFT:
-        #             x += legend.columns
-        #             fitted_width -= legend.columns
-
-        #     elif legend.corner == BOTTOM_RIGHT or legend.corner == TOP_RIGHT or legend.corner == RIGHT:
-        #         # shrink rows/columns, keep x, y
-        #         fitted_width -= legend.columns
-        #         if legend.corner == BOTTOM_RIGHT:
-        #             fitted_height -= legend.rows
-                
-        #     elif legend.corner == BOTTOM or legend.corner == BOTTOM_LEFT:
-        #         fitted_height -= legend.rows
-        #         if legend.corner == BOTTOM_LEFT:
-        #             fitted_width -= legend.columns

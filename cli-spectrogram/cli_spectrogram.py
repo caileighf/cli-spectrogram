@@ -77,7 +77,7 @@ def main(stdscr):
     if args.use_config:
         args = handle_config(args)
 
-    ui = Ui(stdscr=stdscr)
+    ui = Ui(stdscr=stdscr, refresh_hz=args.file_length)
     specgram = Specgram(source=args.source,
                         register_keystroke_callable=ui.register_keystroke_callable,
                         ui=ui,
