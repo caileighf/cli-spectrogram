@@ -28,9 +28,13 @@ class LegendManager(object):
         self.get_legend_dict = get_legend_dict
         self.rows, self.columns = self._init_panels()
         self.side = self._init_position()
+        self.x_label = self.y_label = None
+        self.minimal_mode = False
 
     @property
     def legend_data(self):
+        if self.minimal_mode:
+            return(self.get_legend_dict()['__minimal__'])
         return(self.get_legend_dict())
 
     def _init_position(self):
@@ -45,24 +49,38 @@ class LegendManager(object):
             columns = p.columns
         return(rows, columns)
 
+    def set_x_label(self, label):
+        self.x_label = label
+
+    def set_y_label(self, label):
+        self.y_label = label
+
     def get_total_width(self, side):
-        if side == RIGHT and self.side == RIGHT:
+        if side == self.side:
             return(self.panels[0].columns)
         return(0)
 
     def get_total_height(self, side):
-        if side == TOP and self.side == TOP:
+        if side == self.side:
             return(self.panels[0].rows)
         return(0)
 
     def hline(self, ch=' '):
         return(self.panels[0].hline(ch=ch))
 
+    def refresh(self):
+        [p.refresh() for p in self.panels]
+
     def move_left(self):
         [p.move_left() for p in self.panels]
+        self.refresh()
 
     def move_right(self):
         [p.move_right() for p in self.panels]
+        self.refresh()
+
+    def reset_position(self):
+        [p.reset_position() for p in self.panels]
 
     def set_sticky_sides(self, flag=True):
         for p in self.panels:
@@ -190,19 +208,24 @@ class PanelManager(object):
         self._init_window(window_dimensions)
 
     def _init_window(self, window_dimensions):
-        self.cursor = Cursor(max_rows=window_dimensions.rows,
-                             min_rows=window_dimensions.y)
-        self.window_dimensions = window_dimensions
         if self.border_on:
             self.add_border()
-
+            self.cursor = Cursor(max_rows=window_dimensions.rows,
+                                 min_rows=1)
+        else:
+            self.cursor = Cursor(max_rows=window_dimensions.rows,
+                                 min_rows=0)
+        self.window_dimensions = window_dimensions
+        
     @property
     def window(self):
         return(self.panel.window())
     
     @property
     def x(self):
-        return(self.window_dimensions.x)
+        if self.border_on:
+            return(2)
+        return(0)
 
     @property
     def y(self):
@@ -225,6 +248,10 @@ class PanelManager(object):
     def is_drawn(self):
         return self._is_drawn
     
+    def border(self, flag=True):
+        if self.border_on != flag:
+            self.border_on = flag
+            self._init_window(self.window_dimensions)
 
     def pop_dict_buffer(self, data):
         self.dict_buffer = data
@@ -305,6 +332,10 @@ class PanelManager(object):
             return(False)
         return(True)
 
+    def log(self, output, end='\n'):
+        with open('debug.log', 'a+') as f:
+            f.write('[{}]: {}{}'.format(int(time.time()), output, end))
+
     def redraw_warning(self):
         self.window.move(0, 0)
         self._is_drawn = False
@@ -315,7 +346,9 @@ class PanelManager(object):
         self._is_drawn = True
 
     def redraw_buffer(self):
-        for row in self.buffer:
+        for i, row in enumerate(self.buffer):
+            if i > self.rows - 2: 
+                break
             for pixel in row:
                 self.printch(ch=pixel.text, color=pixel.bg, attr=pixel.attr)
             self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
@@ -328,10 +361,6 @@ class PanelManager(object):
 
     def add_callback(self, callback):
         self.callback.append(callback)
-
-    def log(self, output=None, end='\n'):
-        with open('panel_debug.log', 'a+') as f:
-            f.write('[{}]: {}{}'.format(int(time.time()), output, end))
 
     def print(self, output, x=None, y=None, end='\n'):
         if not isinstance(output, list):
@@ -348,21 +377,13 @@ class PanelManager(object):
 
     def print_line(self, line, x, y, end='\n'):
         _, columns = get_term_size()
-        self.window.addnstr(y, x, '{}{}'.format(line, end), columns-5)
+        try:
+            self.window.addnstr(y, x, '{}{}'.format(line, end), columns-5)
+        except curses.error:
+            pass
 
     def set_focus(self):
         self.panel.top()
-
-    def move(self, x, y):
-        try:
-            self.panel.move(y, x)
-        except:
-            # this only happens when the user resizes the window 
-            # very quickly while expanding and contracting
-            self.log('User tried to resize window too fast! \n{}'.format(traceback.format_exc()))
-            raise ValueError('x or y value would put the window off screen!')
-        else:
-            self.redraw_buffer()
 
     def hline(self, ch='-'):
         _hline = []
@@ -371,27 +392,38 @@ class PanelManager(object):
             ])
         return(_hline)
 
-    def move_left(self):
-        new_win = WindowDimensions(x=self.window_dimensions.x - 2,
-                                   y=self.window_dimensions.y,
-                                   rows=self.window_dimensions.rows,
-                                   columns=self.window_dimensions.columns)
-        self._init_window(new_win)
+    def reset_position(self):
+        self.move(x=self.window_dimensions.x, y=self.window_dimensions.y)
+
+    def move(self, x, y):
         try:
-            self.move(x=self.window_dimensions.x, y=self.window_dimensions.y)
-        except ValueError:
-            self.log('User reached the end of the window \n{}'.format(traceback.format_exc()))
+            self.panel.move(y, x)
+        except:
+            # this only happens when the user resizes the window 
+            # very quickly while expanding and contracting
+            self.log('''
+                User tried to resize window too fast!
+                x or y value would put the window off screen!\n{}'''.format(traceback.format_exc()))
+            return(False)
+        
+        self.redraw_buffer()
+        return(True)
+
+    def move_left(self):
+        if self.move(x=self.window_dimensions.x - 1, y=self.window_dimensions.y):
+            new_win = WindowDimensions(x=self.window_dimensions.x - 1,
+                                       y=self.window_dimensions.y,
+                                       rows=self.window_dimensions.rows,
+                                       columns=self.window_dimensions.columns)
+            self._init_window(new_win)
 
     def move_right(self):
-        new_win = WindowDimensions(x=self.window_dimensions.x + 2,
-                                   y=self.window_dimensions.y,
-                                   rows=self.window_dimensions.rows,
-                                   columns=self.window_dimensions.columns)
-        self._init_window(new_win)
-        try:
-            self.move(x=self.window_dimensions.x, y=self.window_dimensions.y)
-        except ValueError:
-            self.log('User reached the end of the window \n{}'.format(traceback.format_exc()))
+        if self.move(x=self.window_dimensions.x + 1, y=self.window_dimensions.y):
+            new_win = WindowDimensions(x=self.window_dimensions.x + 1,
+                                       y=self.window_dimensions.y,
+                                       rows=self.window_dimensions.rows,
+                                       columns=self.window_dimensions.columns)
+            self._init_window(new_win)
 
     def add_border(self):
         self.window.box()
@@ -425,12 +457,8 @@ class PanelManager(object):
 
     def resize(self, window_dimensions):
         self.window.resize(window_dimensions.rows, window_dimensions.columns)
-        try:
-            self.move(x=window_dimensions.x, y=window_dimensions.y)
-        except ValueError:
-            pass
-        else:
-            self._init_window(window_dimensions)
+        self._init_window(window_dimensions)
+        self.reset_position()
 
     def is_hidden(self):
         return(self.panel.hidden())
