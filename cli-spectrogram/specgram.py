@@ -239,13 +239,6 @@ class Specgram(object):
                         'F / f': 'Toggle full screen on / off',
                         'X / x': 'Toggle Stacked / Best Fit panels',
                     },
-                    # 'Legend Panel Info': {
-                    #     'x': self.legend.window_dimensions.x,
-                    #     'y': self.legend.window_dimensions.y,
-                    #     'rows': self.legend.window_dimensions.rows,
-                    #     'columns': self.legend.window_dimensions.columns,
-                    #     'term size': self.legend.term_size,
-                    # }
                 }
         })
 
@@ -418,7 +411,7 @@ class Specgram(object):
         self.display_channel += 1
 
     def handle_plot_state_change(self, event):
-        if event == 'RESIZE' or event == 'INITIAL_RESIZE':
+        if 'RESIZE' in event:
             # see if we can expand the plot to fit the window
             self.handle_nfft(expand=True)
 

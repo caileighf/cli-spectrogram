@@ -295,9 +295,6 @@ class PanelManager(object):
     def clear_buffer(self):
         self.buffer = []
 
-    def hard_clear(self):
-        pass
-
     def printch(self, ch, attr=None, color=1):
         try:
             self.window.addstr(ch, curses.color_pair(color) | attr)
