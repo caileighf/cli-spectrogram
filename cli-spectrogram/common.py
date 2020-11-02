@@ -78,73 +78,23 @@ Line = namedtuple('Line', ['data', 'attr_mask'])
 
 def accumulate(x, l=[0]): l[0] += x; return l[0];
 
-def get_max(panels, target_attr=[], lateral=True):
-    if lateral:
-        results = [p.columns for p in panels if p.corner == RIGHT] # in target_attr]
-    else:
-        results = [p.rows for p in panels if p.corner in target_attr]
-
-    try:
-        result = max(results)
-    except ValueError:
-        with open('_debug.log', 'a+') as f:
-            output = ''
-            for p in panels:
-                output += ', '.join(p.dict_buffer.keys())
-                output += '\nresults: {}'.format(results)
-                # output += '\n'
-                # output += ', '.join(str(p.dict_buffer.values()))
-                output += '\nColumns: {}'.format(p.columns)
-                output += '\nRows: {}'.format(p.rows)
-                output += '\nActual Corner Type: {}'.format(p.corner)
-                output += '\nis corner valid?: {}\n\n----\n'.format(p.corner in POTENTIAL_POSITIONS)
-
-            f.write('failed! \nattrs tested: {}\nattrs in panels: {}\n'.format(target_attr, output))
-            f.write('\n{}\n'.format(traceback.format_exc()))
-        return(0)
-    return(result)
-
 def get_fitted_window(legend_managers):
     minus_top, minus_bottom = (0, 0)
     minus_left, minus_right = (0, 0)
     for legend in legend_managers.values():
         # find delta from each side
-        minus_right  += legend.get_total_width(side=RIGHT)  #get_max(panels=panels, target_attr=[RIGHT, TOP_RIGHT, BOTTOM_RIGHT])
-        minus_left   += legend.get_total_width(side=LEFT)  #get_max(panels=panels, target_attr=[LEFT, TOP_LEFT, BOTTOM_LEFT])
-        minus_top    += legend.get_total_height(side=TOP)  #get_max(panels=panels, target_attr=[TOP], lateral=False)
-        minus_bottom += legend.get_total_height(side=BOTTOM) #get_max(panels=panels, target_attr=[BOTTOM], lateral=False)
+        minus_right  += legend.get_total_width(side=RIGHT)
+        minus_left   += legend.get_total_width(side=LEFT)
+        minus_top    += legend.get_total_height(side=TOP)
+        minus_bottom += legend.get_total_height(side=BOTTOM)
 
-    # minus_right = max([l.columns for l in panels if l.corner == RIGHT or\
-    #                                                 l.corner == TOP_RIGHT or\
-    #                                                 l.corner == BOTTOM_RIGHT])
-    # minus_left = max([l.columns for l in panels if l.corner == LEFT or\
-    #                                                l.corner == TOP_LEFT or\
-    #                                                l.corner == BOTTOM_LEFT])
-    # minus_top = max([l.rows for l in panels if l.corner == TOP])
-    # minus_bottom = max([l.rows for l in panels if l.corner == BOTTOM])
-
-    x, y = (0, 0)
     # find (x, y) for new plot win
-    x += minus_left
-    y += minus_top
+    x = minus_left
+    y = minus_top
 
     max_rows, max_columns = get_term_size()
     max_rows -= minus_top + minus_bottom
     max_columns -= minus_left + minus_right
-
-    with open('_debug.log', 'a+') as f:
-        f.write('\n\n--------------\nminus_right: {}'.format(minus_right))
-        f.write('\nminus_left: {}'.format(minus_left))
-        f.write('\nminus_top: {}'.format(minus_top))
-        f.write('\nminus_bottom: {}\n//////\n'.format(minus_bottom))
-        f.write('\nx, y: ({}, {})\n'.format(x, y))
-        f.write('\nNEW: rows, columns: ({}, {})\n'.format(max_rows, max_columns))
-        output = '&&&&&'
-        # for i, p in enumerate(panels):
-        #     output += '\n[{}]: All Corner Types: {}'.format(i, p.corner)
-            # output += '\n      __dict__.panel: {}'.format(p.__dict__)
-        output += '\n&&&&&\n'
-        f.write(output)
 
     return(WindowDimensions(x=x, y=y, 
                             rows=max_rows,
