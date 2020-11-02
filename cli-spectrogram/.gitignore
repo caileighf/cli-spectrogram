@@ -1,0 +1,4 @@
+*.log
+.__*_plot__
+local_dev/
+local_dev/*
