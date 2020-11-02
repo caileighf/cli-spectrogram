@@ -61,6 +61,7 @@ class Specgram(object):
                        register_keystroke_callable,
                        ui,
                        device_name,
+                       legend_side=RIGHT,
                        display_channel=0, 
                        threshold_db=90, 
                        markfreq_hz=5000, 
@@ -109,7 +110,7 @@ class Specgram(object):
                                     get_legend_dict=self.legend_data, 
                                     type_=SPLIT_V_STACK, 
                                     shared_dimension=50, 
-                                    side=RIGHT)
+                                    side=legend_side)
         self.legend.set_x_label('Frequency (Hz)')
         self.legend.set_y_label('Time (relative to file start)')
 

@@ -57,6 +57,9 @@ def main(stdscr):
     parser.add_argument('--device-name', help='', default=None, type=str)
     parser.add_argument('--file-length', help='in seconds', required=False, type=float)
     parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
+    parser.add_argument('-l', '--left-hand-legend', action='store_true', 
+                        help='Orient the legend to stick to the left (default: right)', required=False)
+    parser.add_argument('-b', '--best-fit', action='store_true', help='Start in best-fit mode', required=False)
     parser.add_argument('--source', help='Source directory with .txt files', required=False)
     parser.add_argument('--threshold-steps', help='How many dB above and below threshold', required=False, type=int)
     parser.add_argument('-c','--display-channel', help='', required=False, type=int, choices=range(0, 8))
@@ -83,12 +86,15 @@ def main(stdscr):
                         ui=ui,
                         display_channel=args.display_channel,
                         device_name=args.device_name,
+                        legend_side=RIGHT if not args.left_hand_legend else LEFT,
                         threshold_db=args.threshold_db, 
                         markfreq_hz=args.markfreq_hz, 
                         threshold_steps=args.threshold_steps, 
                         nfft=args.nfft,
                         sample_rate=args.sample_rate,
                         file_length=args.file_length)
+    if args.best_fit:
+        ui.toggle_overlap_mode()
     try:
         run_cli(ui=ui,
                 specgram=specgram)
