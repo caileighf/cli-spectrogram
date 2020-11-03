@@ -25,7 +25,8 @@ from common import (
         WindowDimensions, 
         Cursor, 
         get_term_size, 
-        get_fitted_window
+        get_fitted_window,
+        init_color_pairs
     )
 from panel_manager import (LegendManager, PanelManager)
 from common import (
@@ -50,6 +51,7 @@ class Ui(object):
     """
     def __init__(self, stdscr, refresh_hz=0):
         super(Ui, self).__init__()
+        init_color_pairs()
         self.running_async = False
         self.key_buffer = deque()
         self.base_window = stdscr

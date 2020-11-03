@@ -33,19 +33,17 @@ Q_MARK = 63
 STANDOUT_GREEN = 50
 STANDOUT_RED = 51
 
-stdscr = curses.initscr()
-curses.start_color()
-curses.use_default_colors()
-stdscr.scrollok(False)
-# default values for specgram plot
-curses.init_pair(curses.COLOR_BLUE,    curses.COLOR_BLACK, curses.COLOR_BLUE)
-curses.init_pair(curses.COLOR_CYAN,    curses.COLOR_BLACK, curses.COLOR_CYAN)
-curses.init_pair(curses.COLOR_GREEN,   curses.COLOR_BLACK, curses.COLOR_GREEN)
-curses.init_pair(curses.COLOR_YELLOW,  curses.COLOR_BLACK, curses.COLOR_YELLOW)
-curses.init_pair(curses.COLOR_MAGENTA, curses.COLOR_BLACK, curses.COLOR_MAGENTA)
-curses.init_pair(curses.COLOR_RED,     curses.COLOR_BLACK, curses.COLOR_RED)
-curses.init_pair(50, curses.COLOR_GREEN, -1)
-curses.init_pair(51, curses.COLOR_RED, -1)
+def init_color_pairs():
+    curses.use_default_colors()
+    # default values for specgram plot
+    curses.init_pair(curses.COLOR_BLUE,    curses.COLOR_BLACK, curses.COLOR_BLUE)
+    curses.init_pair(curses.COLOR_CYAN,    curses.COLOR_BLACK, curses.COLOR_CYAN)
+    curses.init_pair(curses.COLOR_GREEN,   curses.COLOR_BLACK, curses.COLOR_GREEN)
+    curses.init_pair(curses.COLOR_YELLOW,  curses.COLOR_BLACK, curses.COLOR_YELLOW)
+    curses.init_pair(curses.COLOR_MAGENTA, curses.COLOR_BLACK, curses.COLOR_MAGENTA)
+    curses.init_pair(curses.COLOR_RED,     curses.COLOR_BLACK, curses.COLOR_RED)
+    curses.init_pair(50, curses.COLOR_GREEN, -1)
+    curses.init_pair(51, curses.COLOR_RED, -1)
 
 TOP    = 0
 BOTTOM = 1
