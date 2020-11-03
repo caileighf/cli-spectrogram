@@ -73,11 +73,17 @@ class LegendManager(object):
         self.y_label = label
 
     def get_total_width(self, side):
+        if self.is_hidden():
+            return(0)
+
         if side == self.side:
             return(self.panels[0].columns)
         return(0)
 
     def get_total_height(self, side):
+        if self.is_hidden():
+            return(0)
+
         if side == self.side:
             return(self.panels[0].rows)
         return(0)
@@ -116,6 +122,7 @@ class LegendManager(object):
             else:
                 datertots = [data]
         except KeyError:
+            # return
             raise ValueError(self.panels[0].window_dimensions.data)
 
         for data, p in zip(datertots, self.panels):
@@ -351,8 +358,9 @@ class PanelManager(object):
         pass
 
     def refresh(self):
-        curses.panel.update_panels()
-        self.window.refresh()
+        pass
+        # curses.panel.update_panels()
+        # self.window.refresh()
     
     def clear_buffer(self):
         self.buffer.clear()

@@ -26,7 +26,8 @@ from common import (
         Cursor, 
         get_term_size, 
         get_fitted_window,
-        init_color_pairs
+        init_color_pairs,
+        ESC
     )
 from panel_manager import (LegendManager, PanelManager)
 from common import (
@@ -60,11 +61,12 @@ class Ui(object):
         self.panels = {
             'main': self._init_panel(),
         }
-        self._init_keymap()
         self.saved_windows = {}
         self.legend_managers = {}
         # key map callables (on key do x)
+        self._init_keymap()
         self._overlap_mode = True # panels overlap and are not "fitted" together
+        self._original_panel_mode = self.get_panel_mode()
         # set base window to nodelay so getch will be non-blocking
         self.base_window.nodelay(True)
         curses.curs_set(False)
@@ -87,12 +89,26 @@ class Ui(object):
                                                            key_name='RESIZE',
                                                            call=[self.log_keystroke, self.handle_refit, self.handle_resize],
                                                            case_sensitive=True))
+        self.register_keystroke_callable(KeystrokeCallable(key_id=ESC,
+                                                           key_name='Escape',
+                                                           call=[self.revert_to_original_mode],
+                                                           case_sensitive=True))
+
+    def revert_to_original_mode(self, *args):
+        if self._original_panel_mode != self.get_panel_mode():
+            self.toggle_overlap_mode()
+        # all_legends_hidden = [manager.is_hidden() for name, manager in self.legend_managers.items()]
+        # if False not in all_legends_hidden:
+        #     if self._original_panel_mode != self.get_panel_mode():
+        #         self.toggle_overlap_mode()
             
     def stacked_mode(self):
+        self._original_panel_mode = 'Stacked'
         if not self._overlap_mode:
             self.toggle_overlap_mode()
 
     def best_fit_mode(self):
+        self._original_panel_mode = 'Best Fit'
         if self._overlap_mode:
             self.toggle_overlap_mode()
 
@@ -102,6 +118,9 @@ class Ui(object):
         else:
             mode = 'Best Fit'
         return(mode)
+
+    def add_legend_manager(self, name, manager):
+        self.legend_managers[name] = manager
 
     def toggle_overlap_mode(self, *args):
         self._overlap_mode ^= True
@@ -189,7 +208,7 @@ class Ui(object):
             for opt in mini_options:
                 if side == opt:
                     panels.append(self.new_corner_window(corner=side, 
-                                                         rows=18, 
+                                                         rows=19, 
                                                          columns=50, 
                                                          name='{}_section_{}'.format(name, i)))
             for opt in full_options:
@@ -255,8 +274,8 @@ class Ui(object):
             if not update:
                 return(False)
 
-            old_reg = self.keymap[key_id]
-            keystroke_callable.calls.extend(old_reg.calls)
+            old_reg = self.keymap[keystroke_callable.key_id]
+            keystroke_callable.call.extend(old_reg.call)
 
         self.keymap[keystroke_callable.key_id] = keystroke_callable
         if not keystroke_callable.case_sensitive:
