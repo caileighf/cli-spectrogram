@@ -30,6 +30,8 @@ class LegendManager(object):
         self.side = self._init_position()
         self.x_label = self.y_label = None
         self.minimal_mode = False
+        self.static_index = -1
+        self.done_first_render = False
 
     @property
     def legend_data(self):
@@ -48,6 +50,10 @@ class LegendManager(object):
             rows = p.rows
             columns = p.columns
         return(rows, columns)
+
+    def set_static_index(self, index):
+        self.static_index = index
+        self.done_first_render = False
 
     def set_x_label(self, label):
         self.x_label = label
@@ -151,9 +157,11 @@ class LegendManager(object):
         
         self.update_legend_data() # possibly add this as on_state_change callback
                                   # instead of explicitly calling here
-        for p in self.panels:
-            if p.is_drawn:
+        for i, p in enumerate(self.panels):
+            if p.is_drawn:# or (i == self.static_index and self.done_first_render):
+                # if i == self.static_index: self.done_first_render = True
                 continue
+
             p.clear_buffer()
             p.buffer.append([CursesPixel(text='', fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_NORMAL)])
 
@@ -205,6 +213,7 @@ class PanelManager(object):
         self.fill_screen = fill_screen
         self._term_too_small = False
         self._is_drawn = False # flag for managers of multiple panels
+        self.basic_buffer = False
         self._init_window(window_dimensions)
 
     def _init_window(self, window_dimensions):
@@ -253,6 +262,11 @@ class PanelManager(object):
             self.border_on = flag
             self._init_window(self.window_dimensions)
 
+    def set_basic_buffer(self, flag=True):
+        if self.basic_buffer != flag:
+            self.basic_buffer = flag
+            self._init_window(self.window_dimensions)
+
     def pop_dict_buffer(self, data):
         self.dict_buffer = data
 
@@ -262,6 +276,10 @@ class PanelManager(object):
             func(event='RESIZE')
 
     def handle_resize(self):
+        if self.is_hidden():
+            self.handle_resize_warning()
+            return
+
         height, width = self.term_size
         if self.sticky_sides and self.corner != None:
             # window is smaller then term and has "sticky sides" so we need to move
@@ -320,11 +338,14 @@ class PanelManager(object):
         self.window.refresh()
     
     def clear_buffer(self):
-        self.buffer = []
+        self.buffer.clear()
 
     def printch(self, ch, attr=None, color=1):
         try:
             self.window.addstr(ch, curses.color_pair(color) | attr)
+        except curses.error:
+            if ch == '\n':
+                pass # we wrote past window
         except:
             self.log(traceback.format_exc())
             self.log('color={}, attr={}'.format(color, attr))
@@ -354,7 +375,9 @@ class PanelManager(object):
             self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
         self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
 
-        if self.border_on:
+        if not self.basic_buffer:
+            self.clean_window()
+        elif self.border_on:
             self.add_border()
 
         self.log('length of buffer: {}, term_size: {}'.format(len(self.buffer), self.term_size))
@@ -362,7 +385,7 @@ class PanelManager(object):
     def add_callback(self, callback):
         self.callback.append(callback)
 
-    def print(self, output, x=None, y=None, end='\n'):
+    def print(self, output, x=None, y=None, end='\n', post_clean=True):
         if not isinstance(output, list):
             output = [output]
 
@@ -373,7 +396,9 @@ class PanelManager(object):
                             x=x if x != None else self.x,
                             y=y if y != None else self.y,
                             end=end)
-            if y != None: y += 1 
+            if y != None: y += 1
+        if post_clean and not self.basic_buffer:
+            self.clean_window()
 
     def print_line(self, line, x, y, end='\n'):
         _, columns = get_term_size()
@@ -391,6 +416,11 @@ class PanelManager(object):
                 CursesPixel(text=ch * self.columns, fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD)
             ])
         return(_hline)
+
+    def clean_window(self):
+        self.window.clrtobot()
+        if self.border_on:
+            self.add_border()
 
     def reset_position(self):
         self.move(x=self.window_dimensions.x, y=self.window_dimensions.y)

@@ -36,8 +36,7 @@ STANDOUT_RED = 51
 stdscr = curses.initscr()
 curses.start_color()
 curses.use_default_colors()
-stdscr.clearok(True)
-stdscr.scrollok(True)
+stdscr.scrollok(False)
 # default values for specgram plot
 curses.init_pair(curses.COLOR_BLUE,    curses.COLOR_BLACK, curses.COLOR_BLUE)
 curses.init_pair(curses.COLOR_CYAN,    curses.COLOR_BLACK, curses.COLOR_CYAN)
@@ -88,6 +87,9 @@ def get_fitted_window(legend_managers):
     max_rows, max_columns = get_term_size()
     max_rows -= minus_top + minus_bottom
     max_columns -= minus_left + minus_right
+
+    if minus_right != 0:
+        raise ValueError(minus_left, minus_right, minus_top, minus_bottom)
     
     return(WindowDimensions(x=x, y=y, 
                             rows=max_rows,
@@ -167,11 +169,12 @@ class FileNavManager(object):
 
     Handles list of files and holds "position" of cursor in list of files
     """
-    def __init__(self, data_dir):
+    def __init__(self, data_dir, file_name_pattern='1*.txt'):
         super(FileNavManager, self).__init__()
         self.data_dir = data_dir
         self.shutdown = False
         self._state = 'Streaming'
+        self.file_pattern = file_name_pattern
         self.cursor_pos = self._update_files()
         self._thread = threading.Thread(target=self.run)
         self._thread.start()
@@ -245,7 +248,7 @@ class FileNavManager(object):
         sys.exit()
 
     def _update_files(self):
-        self._files = sorted(pathlib.Path(self.data_dir).glob('1*.txt'))[:-1]
+        self._files = sorted(pathlib.Path(self.data_dir).glob(self.file_pattern))[:-1]
         return(len(self._files))
 
 class Cursor(object):
@@ -265,4 +268,3 @@ class Cursor(object):
             self.iter_y = iter(range(self.min_rows, self.max_rows - 1, self.step))
             return(next(self.iter_y))
         
-

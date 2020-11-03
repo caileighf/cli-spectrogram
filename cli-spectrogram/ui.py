@@ -13,12 +13,20 @@
 # File: ui.py
 #
 from __future__ import print_function
+from collections import deque
 import time, os
 import curses, curses.panel
 import traceback
 import copy
+import threading
 
-from common import (KeystrokeCallable, WindowDimensions, Cursor, get_term_size, get_fitted_window)
+from common import (
+        KeystrokeCallable, 
+        WindowDimensions, 
+        Cursor, 
+        get_term_size, 
+        get_fitted_window
+    )
 from panel_manager import (LegendManager, PanelManager)
 from common import (
         TOP_LEFT,
@@ -42,6 +50,8 @@ class Ui(object):
     """
     def __init__(self, stdscr, refresh_hz=0):
         super(Ui, self).__init__()
+        self.running_async = False
+        self.key_buffer = deque()
         self.base_window = stdscr
         self.refresh_rate = refresh_hz
         # holds all panels (other classes can add panels)
@@ -69,13 +79,21 @@ class Ui(object):
                                                            case_sensitive=False))
         self.register_keystroke_callable(KeystrokeCallable(key_id=curses.KEY_DC,
                                                            key_name='DELETE',
-                                                           call=[self.log_keystroke, self._kill],
+                                                           call=[self.log_keystroke, self.stop, self._kill],
                                                            case_sensitive=True))
         self.register_keystroke_callable(KeystrokeCallable(key_id=curses.KEY_RESIZE,
                                                            key_name='RESIZE',
                                                            call=[self.log_keystroke, self.handle_refit, self.handle_resize],
                                                            case_sensitive=True))
             
+    def stacked_mode(self):
+        if not self._overlap_mode:
+            self.toggle_overlap_mode()
+
+    def best_fit_mode(self):
+        if self._overlap_mode:
+            self.toggle_overlap_mode()
+
     def get_panel_mode(self):
         if self._overlap_mode:
             mode = 'Stacked'
@@ -238,11 +256,48 @@ class Ui(object):
                                     case_sensitive=case_sensitive)
         return(self.register_keystroke_callable(keystroke_callable=new_reg))
 
+    def stop(self, *args):
+        self.shutdown = True
+
+    def run_async(self):
+        self.running_async = True
+        self.shutdown = False
+        self._stop_display = False
+        # handle 
+        threading.excepthook = self._kill
+        # the rendering of the display happens in a separate loop
+        self._async_display_thread = threading.Thread(target=self.run)
+        self._async_display_thread.start()
+        
+        try:
+            while not self.shutdown:
+                # all input related handlers should go here
+                self._handle_keystokes()
+        finally:
+            self._stop_display = True
+            self._async_display_thread.join()
+
+    def run(self):
+        while not self._stop_display:
+            self.spin()
+
     def spin(self):
-        {panel.redraw_warning() for panel_id, panel in self.panels.items() if panel_id != 'main'}
+        start = time.time()
+        for panel_id, panel in self.panels.items():
+            if panel_id != 'main':
+                panel.redraw_warning()
+
         curses.panel.update_panels()
         self.base_window.refresh()
-        self._handle_keystokes()
+
+        if not self.running_async:
+            self._handle_keystokes()
+
+        stop = time.time()
+        self.log_keystroke(KeystrokeCallable(key_id=-1,
+                                             key_name='spin() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
+                                             call=[],
+                                             case_sensitive=True))
 
     def log(self, output, end='\n'):
         with open('debug.log', 'a+') as f:
@@ -270,6 +325,7 @@ class Ui(object):
                                window_dimensions.y,
                                window_dimensions.x)
         panel = curses.panel.new_panel(window)
+        # window.nodelay(True)
 
         return(PanelManager(panel=panel,
                             window_dimensions=window_dimensions,
@@ -282,12 +338,12 @@ class Ui(object):
             key = self.base_window.getch()
             if key != -1:
                 if key in self.keymap:
-                    start = time.time()
+                    start_key_timer = time.time()
                     [func(self.keymap[key]) for func in self.keymap[key].call]
-                    stop = time.time()
+                    stop_key_timer = time.time()
                     self.log_keystroke(KeystrokeCallable(key_id=self.keymap[key].key_id,
                                                          key_name='Timer for: {} --> {} seconds'.format(self.keymap[key].key_name,
-                                                                                                        '%.3f' % (stop - start)),
+                                                                                                        '%.3f' % (stop_key_timer - start_key_timer)),
                                                          call=[],
                                                          case_sensitive=True))
 
@@ -296,18 +352,19 @@ class Ui(object):
                                                          key_name='ERROR Unregistered key: {}'.format(key),
                                                          call=[],
                                                          case_sensitive=True))
+        stop = time.time()
+        self.log_keystroke(KeystrokeCallable(key_id=-1,
+                                             key_name='_handle_keystokes() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
+                                             call=[],
+                                             case_sensitive=True))
 
     def _kill(self, *arg):
         raise KeyboardInterrupt
 
-
-
-
-
 def test(stdscr):
     import random
 
-    ui = Ui(stdscr=stdscr)
+    ui = Ui(stdscr=stdscr, refresh_hz=0.1)
     i = 0
     step = 1
     while True:
@@ -334,9 +391,10 @@ def test(stdscr):
         else:
             i += step
             ui.panels[win_name].border()
+            ui.panels[win_name].set_basic_buffer()
             stop = time.time()
-            ui.panels[win_name].print('This is a test! i = {}'.format(i))
-            ui.panels[win_name].print('Duration: {} seconds'.format(stop - start))
+            ui.panels[win_name].print('This is a test! i = {}'.format(i), post_clean=False)
+            ui.panels[win_name].print('Duration: {} seconds'.format(stop - start), post_clean=False)
         ui.spin()
 
 if __name__ == '__main__':
