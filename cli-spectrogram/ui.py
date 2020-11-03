@@ -179,26 +179,39 @@ class Ui(object):
                                callback=callback))
 
     def new_legend(self, name, num_panels, get_legend_dict, type_, shared_dimension, side):
+        mini_options = [TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT]
+        full_options = [TOP, BOTTOM, LEFT, RIGHT]
         panels = []
         max_rows, max_columns = get_term_size()
         for i in range(num_panels):
-            if side == LEFT or side == RIGHT:
-                columns = shared_dimension
-                rows = max_rows / num_panels
-                y = 0 + (i * rows)
-                x = 0 if side == LEFT else max_columns - columns
-            else:
-                columns = max_columns / num_panels
-                rows = shared_dimension
-                x = 0 + (i * columns)
-                y = 0 if side == TOP else max_rows - rows
+            for opt in mini_options:
+                if side == opt:
+                    panels.append(self.new_corner_window(corner=side, 
+                                                         rows=18, 
+                                                         columns=50, 
+                                                         name='{}_section_{}'.format(name, i)))
+            for opt in full_options:
+                if side == opt:
+                    if side == LEFT or side == RIGHT:
+                        columns = shared_dimension
+                        rows = max_rows / num_panels
+                        y = 0 + (i * rows)
+                        x = 0 if side == LEFT else max_columns - columns
+                    elif side == TOP or side == BOTTOM:
+                        columns = max_columns / num_panels
+                        rows = shared_dimension
+                        x = 0 + (i * columns)
+                        y = 0 if side == TOP else max_rows - rows
 
-            panels.append(self.new_window(x=x, 
-                                          y=y, 
-                                          rows=rows, 
-                                          columns=columns, 
-                                          name='{}_section_{}'.format(name, i),
-                                          corner=side))
+                    panels.append(self.new_window(x=x, 
+                                                  y=y, 
+                                                  rows=rows, 
+                                                  columns=columns, 
+                                                  name='{}_section_{}'.format(name, i),
+                                                  corner=side))
+
+        if len(panels) <= 0:
+            raise ValueError(name, num_panels, get_legend_dict, type_, shared_dimension, side, mini_options, full_options)
 
         self.legend_managers[name] = LegendManager(panels, get_legend_dict, type_)
         return(self.legend_managers[name])

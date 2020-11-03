@@ -41,6 +41,9 @@ class LegendManager(object):
             return(self.get_legend_dict()['__minimal__'])
         return(self.get_legend_dict())
 
+    def toggle_minimal_mode(self):
+        self.minimal_mode ^= True
+
     def _init_position(self):
         return(self.panels[0].corner)
 
@@ -105,12 +108,15 @@ class LegendManager(object):
             self.side = self._init_position()
 
         data = self.legend_data
-        if self.type_ == SPLIT_V_STACK:
-            datertots = [data['UPPER'], data['LOWER']]
-        elif self.type_ == SPLIT_H_STACK:
-            datertots = [data['LEFT'], data['RIGHT']]
-        else:
-            datertots = [data]
+        try:
+            if self.type_ == SPLIT_V_STACK:
+                datertots = [data['UPPER'], data['LOWER']]
+            elif self.type_ == SPLIT_H_STACK:
+                datertots = [data['LEFT'], data['RIGHT']]
+            else:
+                datertots = [data]
+        except KeyError:
+            raise ValueError(self.panels[0].window_dimensions.data)
 
         for data, p in zip(datertots, self.panels):
             p.pop_dict_buffer(data)
@@ -447,6 +453,10 @@ class PanelManager(object):
                     self.corner = LEFT
                 elif self.corner == LEFT and x <= max_columns:
                     self.corner = RIGHT
+                elif self.corner == TOP and y <= 0:
+                    self.corner = BOTTOM
+                elif self.corner == BOTTOM and y <= max_rows:
+                    self.corner = TOP
 
             self.log('''
                 User tried to resize window too fast!
