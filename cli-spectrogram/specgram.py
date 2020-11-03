@@ -574,8 +574,12 @@ class Specgram(object):
         self.full_screen_mode ^= True # toggle
         if self.full_screen_mode:
             self.legend.hide_all()
+            if self.ui.get_panel_mode() == 'Best Fit':
+                self.ui.toggle_overlap_mode()
         else:
             self.legend.show_all()
+            # if self.ui.get_panel_mode() == 'Stacked':
+            #     self.ui.toggle_overlap_mode()
         self.window.refresh()
 
     def toggle_legend(self, args):
