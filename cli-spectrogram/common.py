@@ -87,9 +87,6 @@ def get_fitted_window(legend_managers):
     max_rows, max_columns = get_term_size()
     max_rows -= minus_top + minus_bottom
     max_columns -= minus_left + minus_right
-
-    if minus_right != 0:
-        raise ValueError(minus_left, minus_right, minus_top, minus_bottom)
     
     return(WindowDimensions(x=x, y=y, 
                             rows=max_rows,

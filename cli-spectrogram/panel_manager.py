@@ -19,6 +19,8 @@ import traceback
 import time
 import curses
 
+BUMPER_CAR_MODE = True
+
 class LegendManager(object):
     """docstring for LegendManager"""
     def __init__(self, panels, get_legend_dict, type_=SINGLE_V):
@@ -52,7 +54,13 @@ class LegendManager(object):
         return(rows, columns)
 
     def set_static_index(self, index):
-        self.static_index = index
+        if index.isdigit():
+            self.static_index = index
+        else:
+            if index == 'UPPER' or index == 'LEFT':
+                self.static_index = 0
+            else:
+                self.static_index = 1
         self.done_first_render = False
 
     def set_x_label(self, label):
@@ -93,6 +101,9 @@ class LegendManager(object):
             p.sticky_sides = True
 
     def update_legend_data(self):
+        if BUMPER_CAR_MODE:
+            self.side = self._init_position()
+
         data = self.legend_data
         if self.type_ == SPLIT_V_STACK:
             datertots = [data['UPPER'], data['LOWER']]
@@ -429,8 +440,14 @@ class PanelManager(object):
         try:
             self.panel.move(y, x)
         except:
-            # this only happens when the user resizes the window 
-            # very quickly while expanding and contracting
+            # this only happens when the window would be moved off the page
+            if BUMPER_CAR_MODE:
+                max_rows, max_columns = get_term_size()
+                if self.corner == RIGHT and x <= 0:
+                    self.corner = LEFT
+                elif self.corner == LEFT and x <= max_columns:
+                    self.corner = RIGHT
+
             self.log('''
                 User tried to resize window too fast!
                 x or y value would put the window off screen!\n{}'''.format(traceback.format_exc()))

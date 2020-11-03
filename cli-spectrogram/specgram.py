@@ -112,8 +112,7 @@ class Specgram(object):
                                     side=legend_side)
         self.legend.set_x_label('Frequency (Hz)')
         self.legend.set_y_label('Time (relative to file start)')
-        # self.legend.set_static_index('LOWER')
-        self.legend.set_static_index(1)
+        self.legend.set_static_index('LOWER')
         self.cached_legend_elements = {}
         for section, val in self.legend_data().items():
             for _, pairs in val.items():
