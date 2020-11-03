@@ -290,10 +290,10 @@ class Ui(object):
         curses.panel.update_panels()
         self.base_window.refresh()
 
-        if not self.running_async:
-            self._handle_keystokes()
-
         stop = time.time()
+        if not self.running_async:
+            self._handle_keystokes(remaining_time=abs(self.refresh_rate - (stop - start)))
+
         self.log_keystroke(KeystrokeCallable(key_id=-1,
                                              key_name='spin() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
                                              call=[],
@@ -332,9 +332,12 @@ class Ui(object):
                             callback=callback,
                             corner=corner))
 
-    def _handle_keystokes(self):
+    def _handle_keystokes(self, remaining_time=None):
+        if remaining_time == None:
+            remaining_time = self.refresh_rate
+
         start = time.time()
-        while time.time() - start <= self.refresh_rate:
+        while time.time() - start <= remaining_time:
             key = self.base_window.getch()
             if key != -1:
                 if key in self.keymap:
