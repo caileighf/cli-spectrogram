@@ -395,9 +395,10 @@ class PanelManager(object):
         for i, row in enumerate(self.buffer):
             if i > self.rows - 2: 
                 break
-            for pixel in row:
-                self.printch(ch=pixel.text, color=pixel.bg, attr=pixel.attr)
-            self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
+            if row != None:
+                for pixel in row:
+                    self.printch(ch=pixel.text, color=pixel.bg, attr=pixel.attr)
+                self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
         self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
 
         if not self.basic_buffer:
