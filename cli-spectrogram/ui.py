@@ -322,8 +322,7 @@ class Ui(object):
                 panel.redraw_warning()
 
         curses.panel.update_panels()
-        self.base_window.refresh()
-
+        curses.doupdate()
         stop = time.time()
         if not self.running_async:
             self._handle_keystokes(remaining_time=abs(self.refresh_rate - (stop - start)))
@@ -359,7 +358,6 @@ class Ui(object):
                                window_dimensions.y,
                                window_dimensions.x)
         panel = curses.panel.new_panel(window)
-        # window.nodelay(True)
 
         return(PanelManager(panel=panel,
                             window_dimensions=window_dimensions,
