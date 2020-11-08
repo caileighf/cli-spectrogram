@@ -65,7 +65,7 @@ class Specgram(object):
                        display_channel=0, 
                        threshold_db=90, 
                        markfreq_hz=5000, 
-                       threshold_steps=5, 
+                       threshold_steps=1, 
                        nfft=240,
                        sample_rate=19200,
                        file_length=1.0):
@@ -254,6 +254,7 @@ class Specgram(object):
             },
             '__minimal__': {
                 'Spectrogram Information': {
+                    'Time': str(self.get_formatted_dt()),
                     '__date_time_bar__': self.create_dt_bar(),
                     'Threshold (dB)': self.threshold_db,
                     'Sample Rate (Hz)': self.sample_rate,

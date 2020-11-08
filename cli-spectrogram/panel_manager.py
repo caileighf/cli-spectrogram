@@ -92,7 +92,7 @@ class LegendManager(object):
         return(self.panels[0].hline(ch=ch))
 
     def refresh(self):
-        [p.refresh() for p in self.panels]
+        [p.noutrefresh() for p in self.panels]
 
     def move_left(self):
         [p.move_left() for p in self.panels]
