@@ -32,6 +32,15 @@ Q_MARK = 63
 
 STANDOUT_GREEN = 50
 STANDOUT_RED = 51
+STANDOUT_MONO_LIGHT = 155  #_WHITE
+STANDOUT_MONO_MEDIUM = 156 #_LIGHTEST_GREY
+
+_WHITE = 231
+_LIGHTEST_GREY = 253
+_LIGHT_GREY = 240
+_DARK_GREY = 237
+_DARKEST_GREY = 235
+_BLACK = 233
 
 def init_color_pairs():
     curses.use_default_colors()
@@ -42,8 +51,62 @@ def init_color_pairs():
     curses.init_pair(curses.COLOR_YELLOW,  curses.COLOR_BLACK, curses.COLOR_YELLOW)
     curses.init_pair(curses.COLOR_MAGENTA, curses.COLOR_BLACK, curses.COLOR_MAGENTA)
     curses.init_pair(curses.COLOR_RED,     curses.COLOR_BLACK, curses.COLOR_RED)
-    curses.init_pair(50, curses.COLOR_GREEN, -1)
-    curses.init_pair(51, curses.COLOR_RED, -1)
+    curses.init_pair(STANDOUT_GREEN, curses.COLOR_GREEN, -1)
+    curses.init_pair(STANDOUT_RED, curses.COLOR_RED, -1)
+
+    curses.init_pair(_WHITE,         curses.COLOR_BLACK, _WHITE)   
+    curses.init_pair(_LIGHTEST_GREY, curses.COLOR_BLACK, _LIGHTEST_GREY)
+    curses.init_pair(_LIGHT_GREY,    curses.COLOR_BLACK, _LIGHT_GREY)
+    curses.init_pair(_DARK_GREY,     curses.COLOR_BLACK, _DARK_GREY)
+    curses.init_pair(_DARKEST_GREY,  curses.COLOR_BLACK, _DARKEST_GREY)
+    curses.init_pair(_BLACK,         curses.COLOR_BLACK, _BLACK)
+
+    curses.init_pair(STANDOUT_GREEN, curses.COLOR_GREEN, -1)
+    curses.init_pair(STANDOUT_RED, curses.COLOR_RED, -1)
+
+    curses.init_pair(STANDOUT_MONO_LIGHT,  _WHITE, -1)
+    curses.init_pair(STANDOUT_MONO_MEDIUM, _LIGHTEST_GREY, -1)
+
+
+full_color = [
+    curses.COLOR_BLUE,
+    curses.COLOR_CYAN,
+    curses.COLOR_GREEN,
+    curses.COLOR_YELLOW,
+    curses.COLOR_MAGENTA,
+    curses.COLOR_RED,
+]
+
+grayscale_color = [
+    _BLACK,
+    _DARKEST_GREY,
+    _DARK_GREY,
+    _LIGHT_GREY,
+    _LIGHTEST_GREY,
+    _WHITE,
+]
+
+full_color_standout = [
+    STANDOUT_GREEN,
+    STANDOUT_RED
+]
+
+grayscale_color_standout = [
+    STANDOUT_MONO_LIGHT,
+    STANDOUT_MONO_MEDIUM
+]
+
+full_color_accent = [
+    curses.COLOR_GREEN,
+    curses.COLOR_YELLOW,
+    curses.COLOR_RED
+]
+
+grayscale_color_accent = [
+    _WHITE,
+    _LIGHTEST_GREY,
+    _WHITE
+]
 
 TOP    = 0
 BOTTOM = 1

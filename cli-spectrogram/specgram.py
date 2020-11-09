@@ -31,6 +31,14 @@ from common import (
         SINGLE_V,
         SINGLE_H
     )
+from common import (
+        full_color,
+        grayscale_color,
+        full_color_standout,
+        grayscale_color_standout,
+        full_color_accent,
+        grayscale_color_accent
+    )
 import sys, time
 import numpy
 import math
@@ -68,7 +76,8 @@ class Specgram(object):
                        threshold_steps=1, 
                        nfft=240,
                        sample_rate=19200,
-                       file_length=1.0):
+                       file_length=1.0,
+                       use_full_color=True):
         super(Specgram, self).__init__()
         self.ui = ui # ui instance for creating plot window and legend windows
         self.window = ui.new_full_size_window(name='specgram_plot')
@@ -98,6 +107,8 @@ class Specgram(object):
         self.argmax_freq = 0
 
         self.full_screen_mode = False
+        self._init_color(use_full_color)
+
         self.file_manager = FileNavManager(data_dir=self.source)
         self.current_file = self.file_manager.next_file()
         self.device_name = device_name
@@ -121,6 +132,24 @@ class Specgram(object):
 
         self.handle_plot_state_change(event='INITIAL_RESIZE')
 
+    def _init_color(self, use_full_color):
+        self.use_full_color = use_full_color
+        if self.use_full_color:
+            self.color = full_color
+            self.standout_color = full_color_standout
+            self.accent_color = full_color_accent
+        else:
+            self.color = grayscale_color
+            self.standout_color = grayscale_color_standout
+            self.accent_color = grayscale_color_accent
+
+    def toggle_grayscale(self, *args):
+        self._init_color(use_full_color=not self.use_full_color)
+        self.invalidate_cache()
+
+    def reverse_color_map(self, *args):
+        self.color.reverse()
+        self.invalidate_cache()
 
     def _init_keymap(self):
         self.keymap = [
@@ -148,6 +177,10 @@ class Specgram(object):
                               key_name='F',
                               call=[self.full_screen],
                               case_sensitive=False),
+            KeystrokeCallable(key_id=ord('G'),
+                              key_name='G',
+                              call=[self.toggle_grayscale],
+                              case_sensitive=False),
             KeystrokeCallable(key_id=ord('H'),
                               key_name='H',
                               call=[self.toggle_legend],
@@ -155,6 +188,10 @@ class Specgram(object):
             KeystrokeCallable(key_id=ord('M'),
                               key_name='M',
                               call=[self.toggle_minimal_mode],
+                              case_sensitive=False),
+            KeystrokeCallable(key_id=ord('R'),
+                              key_name='R',
+                              call=[self.reverse_color_map],
                               case_sensitive=False),
             KeystrokeCallable(key_id=Q_MARK,
                               key_name='?',
@@ -269,7 +306,6 @@ class Specgram(object):
                 },
             },
         }
-
         return(legend_dict)
 
     def handle_config(self, key):
@@ -314,6 +350,8 @@ class Specgram(object):
         self.cached_legend_elements['__date_time_bar__']['is_valid'] = False
         self.cached_legend_elements['__nav_mode_bar__']['is_valid'] = False
         self.cached_legend_elements['__intensity_bar__']['is_valid'] = False
+        self.cached_legend_elements['__channel_bar__']['is_valid'] = False
+        self.cached_legend_elements['__plot_mode_bar__']['is_valid'] = False
 
     def handle_navigation(self, key):
         start = time.time()
@@ -425,13 +463,13 @@ class Specgram(object):
             top_bar.append(
                     CursesPixel(text='|' if ioi else '_', 
                                 fg=-1, 
-                                bg=STANDOUT_RED if ioi else COLOR_BLACK, 
+                                bg=self.standout_color[1] if ioi else COLOR_BLACK,
                                 attr=A_BOLD if ioi else A_NORMAL)
                 )
             bottom_bar.append(
                     CursesPixel(text='^' if ioi else ' ', 
                                 fg=-1, 
-                                bg=STANDOUT_RED if ioi else COLOR_BLACK, 
+                                bg=self.standout_color[1] if ioi else COLOR_BLACK, 
                                 attr=A_BOLD if ioi else A_NORMAL)
                 )
         dataset_pos_bar = []
@@ -457,19 +495,19 @@ class Specgram(object):
         top_bar = []
         bottom_bar = []
         chan_str = ' Channel: '
-        available_width = legend.columns - len(chan_str)
-        top_bar.append(CursesPixel(text='\n{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=STANDOUT_GREEN))
+        available_width = self.legend.columns - len(chan_str)
+        top_bar.append(CursesPixel(text='\n{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=self.standout_color[0]))
         bottom_bar.append(CursesPixel(text=' ' * len(chan_str), fg=-1, attr=A_BOLD, bg=COLOR_BLACK))
         for i in range(self.available_channels):
             top_bar.append(
                     CursesPixel(text='{}'.format(i).center(int(available_width / self.available_channels)), 
                         fg=-1, attr=A_BOLD,
-                        bg=COLOR_BLACK if self.display_channel != i else STANDOUT_GREEN),
+                        bg=COLOR_BLACK if self.display_channel != i else self.standout_color[0]),
                 )
             bottom_bar.append(
                     CursesPixel(text='{}'.format(' ' if self.display_channel != i else '^').center(int(available_width / self.available_channels)), 
                         fg=-1, attr=A_BOLD,
-                        bg=COLOR_BLACK if self.display_channel != i else STANDOUT_RED),
+                        bg=COLOR_BLACK if self.display_channel != i else self.standout_color[1]),
                 )
 
         channel_bar = []
@@ -493,11 +531,11 @@ class Specgram(object):
 
         mode_bar = []
         if self.ui.get_panel_mode() == 'Stacked':
-            color = COLOR_YELLOW
+            color = self.accent_color[1]
         elif self.ui.get_panel_mode() == 'Best Fit':
-            color = COLOR_GREEN
+            color = self.accent_color[0]
         else:
-            color = COLOR_RED
+            color = self.accent_color[2]
         mode_bar.extend([
                 CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
@@ -520,11 +558,11 @@ class Specgram(object):
 
         mode_bar = []
         if self.file_manager.state == 'Streaming':
-            color = COLOR_GREEN
+            color = self.accent_color[0]
         elif self.file_manager.state == 'Navigation':
-            color = COLOR_YELLOW
+            color = self.accent_color[1]
         else:
-            color = COLOR_RED
+            color = self.accent_color[2]
         mode_bar.extend([
                 CursesPixel(text='Nav Mode: {}'.format(self.file_manager.state).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
@@ -551,13 +589,13 @@ class Specgram(object):
                 CursesPixel(text='Loudest  '.rjust(int(legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
             ])
         intensity_bar.extend([
-                CursesPixel(text=' ' * int(legend.columns / 5), fg=-1, bg=COLOR_CYAN, attr=A_BOLD),
-                CursesPixel(text=' ' * int(legend.columns / 6), fg=-1, bg=COLOR_BLUE, attr=A_BOLD),
-                CursesPixel(text=' ' * int(legend.columns / 6), fg=-1, bg=COLOR_GREEN, attr=A_BOLD),
-                CursesPixel(text=' ' * int(legend.columns / 6), fg=-1, bg=COLOR_YELLOW, attr=A_BOLD),
-                CursesPixel(text=' ' * int(legend.columns / 6), fg=-1, bg=COLOR_MAGENTA, attr=A_BOLD),
-                CursesPixel(text=' ' * int(legend.columns / 6), fg=-1, bg=COLOR_RED, attr=A_BOLD),
-                CursesPixel(text=' ', fg=-1, bg=COLOR_RED, attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.legend.columns / 5), fg=-1, bg=self.color[0], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[1], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[2], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[3], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[4], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[5], attr=A_BOLD),
+                CursesPixel(text=' ',                                fg=-1, bg=self.color[5], attr=A_BOLD),
             ])
         lower_bound = ' {}dB'.format(self.threshold_db - self.threshold_steps * 2)
         current_dB = '{}dB'.format(self.threshold_db)
@@ -796,18 +834,18 @@ class Specgram(object):
             for f in frequency_db_vector:
                 if int(f) >= self.threshold_db:
                     if int(f) - self.threshold_db <= self.threshold_steps:       # closest to thresh
-                        line.append(COLOR_YELLOW)
+                        line.append(self.color[3])
                     elif int(f) - self.threshold_db < self.threshold_steps * 2:  # in between closest and max
-                        line.append(COLOR_MAGENTA)
+                        line.append(self.color[4])
                     elif int(f) - self.threshold_db >= self.threshold_steps * 2: # loudest
-                        line.append(COLOR_RED)
+                        line.append(self.color[5])
                 else:
                     if self.threshold_db - int(f) <= self.threshold_steps:      # close to thresh
-                        line.append(COLOR_GREEN)
+                        line.append(self.color[2])
                     elif self.threshold_db - int(f) < self.threshold_steps * 2: # in between 
-                        line.append(COLOR_CYAN)
+                        line.append(self.color[1])
                     elif self.threshold_db - int(f) >= self.threshold_steps * 2:  # quietest
-                        line.append(COLOR_BLUE)
+                        line.append(self.color[0])
 
             rows.append(line)
             time_vector.append(start + self.nfft / 2)
