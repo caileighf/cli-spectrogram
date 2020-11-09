@@ -287,6 +287,8 @@ class Specgram(object):
                     'H / h': 'Toggle keyboard shortcuts on / off',
                     'F / f': 'Toggle full screen on / off',
                     'X / x': 'Toggle window mode Stacked / Best Fit',
+                    'G / g': 'Toggle grayscale / full color',
+                    'R / r': 'Reverse color map',
                 },
             },
             '__minimal__': {
