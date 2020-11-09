@@ -30,22 +30,71 @@ SHIFT_LEFT = 393
 SHIFT_RIGHT = 402
 Q_MARK = 63
 
-STANDOUT_GREEN = 50
-STANDOUT_RED = 51
-
 stdscr = curses.initscr()
 curses.start_color()
 curses.use_default_colors()
 stdscr.scrollok(False)
-# default values for specgram plot
+
 curses.init_pair(curses.COLOR_BLUE,    curses.COLOR_BLACK, curses.COLOR_BLUE)
 curses.init_pair(curses.COLOR_CYAN,    curses.COLOR_BLACK, curses.COLOR_CYAN)
 curses.init_pair(curses.COLOR_GREEN,   curses.COLOR_BLACK, curses.COLOR_GREEN)
 curses.init_pair(curses.COLOR_YELLOW,  curses.COLOR_BLACK, curses.COLOR_YELLOW)
 curses.init_pair(curses.COLOR_MAGENTA, curses.COLOR_BLACK, curses.COLOR_MAGENTA)
 curses.init_pair(curses.COLOR_RED,     curses.COLOR_BLACK, curses.COLOR_RED)
-curses.init_pair(50, curses.COLOR_GREEN, -1)
-curses.init_pair(51, curses.COLOR_RED, -1)
+
+_WHITE = 231
+_LIGHTEST_GREY = 253
+_LIGHT_GREY = 240
+_DARK_GREY = 237
+_DARKEST_GREY = 235
+_BLACK = 233
+
+curses.init_pair(_WHITE,         curses.COLOR_BLACK, _WHITE)   
+curses.init_pair(_LIGHTEST_GREY, curses.COLOR_BLACK, _LIGHTEST_GREY)
+curses.init_pair(_LIGHT_GREY,    curses.COLOR_BLACK, _LIGHT_GREY)
+curses.init_pair(_DARK_GREY,     curses.COLOR_BLACK, _DARK_GREY)
+curses.init_pair(_DARKEST_GREY,  curses.COLOR_BLACK, _DARKEST_GREY)
+curses.init_pair(_BLACK,         curses.COLOR_BLACK, _BLACK)
+
+full_color = [
+    curses.COLOR_BLUE,
+    curses.COLOR_CYAN,
+    curses.COLOR_GREEN,
+    curses.COLOR_YELLOW,
+    curses.COLOR_MAGENTA,
+    curses.COLOR_RED,
+]
+
+greyscale_color = [
+    _BLACK,
+    _DARKEST_GREY,
+    _DARK_GREY,
+    _LIGHT_GREY,
+    _LIGHTEST_GREY,
+    _WHITE,
+]
+
+STANDOUT_GREEN = 50
+STANDOUT_RED = 51
+
+curses.init_pair(STANDOUT_GREEN, curses.COLOR_GREEN, -1)
+curses.init_pair(STANDOUT_RED, curses.COLOR_RED, -1)
+
+STANDOUT_MONO_LIGHT = 155  #_LIGHTEST_GREY
+STANDOUT_MONO_MEDIUM = 156 #_LIGHT_GREY
+
+curses.init_pair(STANDOUT_MONO_LIGHT,  _WHITE, -1)
+curses.init_pair(STANDOUT_MONO_MEDIUM, _LIGHTEST_GREY, -1)
+
+full_color_standout = [
+    STANDOUT_GREEN,
+    STANDOUT_RED
+]
+
+greyscale_color_standout = [
+    STANDOUT_MONO_LIGHT,
+    STANDOUT_MONO_MEDIUM
+]
 
 TOP    = 0
 BOTTOM = 1
