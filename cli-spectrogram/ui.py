@@ -209,7 +209,7 @@ class Ui(object):
                 if side == opt:
                     panels.append(self.new_corner_window(corner=side, 
                                                          rows=19, 
-                                                         columns=50, 
+                                                         columns=40, 
                                                          name='{}_section_{}'.format(name, i)))
             for opt in full_options:
                 if side == opt:
@@ -431,6 +431,32 @@ def test(stdscr):
             ui.panels[win_name].print('This is a test! i = {}'.format(i), post_clean=False)
             ui.panels[win_name].print('Duration: {} seconds'.format(stop - start), post_clean=False)
         ui.spin()
+
+# import plotext.plot as plx
+# from collections import deque
+# import random
+
+# def get_formatted_canvas():
+#     plx._set_xlim()
+#     plx._set_ylim()
+#     plx._set_grid()
+#     plx._add_yaxis()
+#     plx._add_xaxis()
+#     plx._set_canvas()
+#     plx._add_equations()
+#     return(plx._get_canvas())
+
+# def test_cli_plotter(stdscr):
+#     rows, columns = get_term_size()
+#     ui = Ui(stdscr=stdscr, refresh_hz=0.1)
+#     win = ui.new_window(1, 1, rows - 2, columns - 2, 'cli-plot', overwrite=True)
+#     while True:
+#         plx.plot([random.random() for i in range(200)], [-random.random() for i in range(200)])
+#         canvas = get_formatted_canvas()
+#         ui.spin()
+
+#         plx.sleep(0.2)
+#         plx.clear_terminal()
 
 if __name__ == '__main__':
     try:
