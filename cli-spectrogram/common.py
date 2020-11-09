@@ -65,7 +65,7 @@ full_color = [
     curses.COLOR_RED,
 ]
 
-greyscale_color = [
+grayscale_color = [
     _BLACK,
     _DARKEST_GREY,
     _DARK_GREY,
@@ -91,9 +91,21 @@ full_color_standout = [
     STANDOUT_RED
 ]
 
-greyscale_color_standout = [
+grayscale_color_standout = [
     STANDOUT_MONO_LIGHT,
     STANDOUT_MONO_MEDIUM
+]
+
+full_color_accent = [
+    curses.COLOR_GREEN,
+    curses.COLOR_YELLOW,
+    curses.COLOR_RED
+]
+
+grayscale_color_accent = [
+    _WHITE,
+    _LIGHTEST_GREY,
+    _WHITE
 ]
 
 TOP    = 0
