@@ -20,7 +20,6 @@ import curses
 # internal
 from ui import Ui
 from specgram import Specgram
-from common import FileNavManager
 from common import (
         TOP_LEFT,
         TOP_RIGHT,
@@ -93,9 +92,7 @@ def main(stdscr):
                         nfft=args.nfft,
                         sample_rate=args.sample_rate,
                         file_length=args.file_length)
-    if args.stacked_mode:
-        ui.stacked_mode()
-    else:
+    if not args.stacked_mode:
         ui.best_fit_mode()
 
     try:

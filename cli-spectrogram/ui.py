@@ -25,7 +25,10 @@ from common import (
         WindowDimensions, 
         Cursor, 
         get_term_size, 
-        get_fitted_window
+        get_fitted_window,
+        init_color_pairs,
+        ESC,
+        Q_MARK
     )
 from panel_manager import (LegendManager, PanelManager)
 from common import (
@@ -50,6 +53,7 @@ class Ui(object):
     """
     def __init__(self, stdscr, refresh_hz=0):
         super(Ui, self).__init__()
+        init_color_pairs()
         self.running_async = False
         self.key_buffer = deque()
         self.base_window = stdscr
@@ -58,11 +62,14 @@ class Ui(object):
         self.panels = {
             'main': self._init_panel(),
         }
-        self._init_keymap()
         self.saved_windows = {}
         self.legend_managers = {}
         # key map callables (on key do x)
+        self._init_keymap()
+        self._init_help()
+        # self._init_message_bar()
         self._overlap_mode = True # panels overlap and are not "fitted" together
+        self._original_panel_mode = self.get_panel_mode()
         # set base window to nodelay so getch will be non-blocking
         self.base_window.nodelay(True)
         curses.curs_set(False)
@@ -85,12 +92,75 @@ class Ui(object):
                                                            key_name='RESIZE',
                                                            call=[self.log_keystroke, self.handle_refit, self.handle_resize],
                                                            case_sensitive=True))
+        self.register_keystroke_callable(KeystrokeCallable(key_id=ESC,
+                                                           key_name='Escape',
+                                                           call=[self.revert_to_original_mode],
+                                                           case_sensitive=True))
+        self.register_keystroke_callable(KeystrokeCallable(key_id=ord(' '),
+                                                           key_name='Space',
+                                                           call=[self.toggle_help],
+                                                           case_sensitive=True))
+        self.register_keystroke_callable(KeystrokeCallable(key_id=Q_MARK,
+                                                           key_name='?',
+                                                           call=[self.toggle_help],
+                                                           case_sensitive=True))
+
+    def _init_help(self):
+        self.help_info = {
+            'UI Keyboard Shortcuts': {
+                'X / x': 'Toggle window mode Stacked / Best Fit',
+                'Delete': 'Exit',
+                'Escape': 'Revert to original layout'
+            }
+        }
+        height, _ = get_term_size()
+        help_panel = self.new_center_window(rows=(height - 8), columns=50, name='ui_help')
+        self.add_legend_manager(name='ui_help_legend', 
+                                manager=LegendManager(panels=[help_panel],
+                                                      get_legend_dict=self.get_help_info))
+        self.legend_managers['ui_help_legend'].footer = 'Show/Hide this window with ? or space bar'
+        self.legend_managers['ui_help_legend'].hide_all()
+        self.is_help_shown = False
+
+    def _init_message_bar(self):
+        self.message_bar = self.new_corner_window(corner=BOTTOM, rows=3, columns=None, name='ui_message_bar')
+        self.message_bar.set_basic_buffer()
+        self.message_bar.border(True)
+        self.message_bar.print('  Hit the space bar or ? to toggle the help window | Ctrl + c to quit ', post_clean=False)
+        
+        curses.panel.update_panels()
+        curses.doupdate()
+
+    def set_help_info(self, info, title, overwrite=False):
+        if not overwrite:
+            if title in self.help_info:
+                return(False)
+
+        self.help_info[title] = info
+        return(True)
+
+    def get_help_info(self):
+        return(self.help_info)
+
+    def toggle_help(self, *args):
+        self.is_help_shown ^= True
+        self.legend_managers['ui_help_legend'].toggle_all()
+
+    def revert_to_original_mode(self, *args):
+        if self._original_panel_mode != self.get_panel_mode():
+            self.toggle_overlap_mode()
+        # all_legends_hidden = [manager.is_hidden() for name, manager in self.legend_managers.items()]
+        # if False not in all_legends_hidden:
+        #     if self._original_panel_mode != self.get_panel_mode():
+        #         self.toggle_overlap_mode()
             
     def stacked_mode(self):
+        self._original_panel_mode = 'Stacked'
         if not self._overlap_mode:
             self.toggle_overlap_mode()
 
     def best_fit_mode(self):
+        self._original_panel_mode = 'Best Fit'
         if self._overlap_mode:
             self.toggle_overlap_mode()
 
@@ -100,6 +170,9 @@ class Ui(object):
         else:
             mode = 'Best Fit'
         return(mode)
+
+    def add_legend_manager(self, name, manager):
+        self.legend_managers[name] = manager
 
     def toggle_overlap_mode(self, *args):
         self._overlap_mode ^= True
@@ -157,7 +230,7 @@ class Ui(object):
             y = height - rows
 
         if corner == BOTTOM_LEFT or corner == TOP_LEFT or\
-           corner == TOP or corner == LEFT:
+           corner == TOP or corner == LEFT or corner == BOTTOM:
             x = 0
         else:
             x = width - columns
@@ -179,29 +252,66 @@ class Ui(object):
                                callback=callback))
 
     def new_legend(self, name, num_panels, get_legend_dict, type_, shared_dimension, side):
+        mini_options = [TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT]
+        full_options = [TOP, BOTTOM, LEFT, RIGHT]
         panels = []
         max_rows, max_columns = get_term_size()
         for i in range(num_panels):
-            if side == LEFT or side == RIGHT:
-                columns = shared_dimension
-                rows = max_rows / num_panels
-                y = 0 + (i * rows)
-                x = 0 if side == LEFT else max_columns - columns
-            else:
-                columns = max_columns / num_panels
-                rows = shared_dimension
-                x = 0 + (i * columns)
-                y = 0 if side == TOP else max_rows - rows
+            for opt in mini_options:
+                if side == opt:
+                    panels.append(self.new_corner_window(corner=side, 
+                                                         rows=19, 
+                                                         columns=50, 
+                                                         name='{}_section_{}'.format(name, i)))
+            for opt in full_options:
+                if side == opt:
+                    if side == LEFT or side == RIGHT:
+                        columns = shared_dimension
+                        rows = max_rows / num_panels
+                        y = 0 + (i * rows)
+                        x = 0 if side == LEFT else max_columns - columns
+                    elif side == TOP or side == BOTTOM:
+                        columns = max_columns / num_panels
+                        rows = shared_dimension
+                        x = 0 + (i * columns)
+                        y = 0 if side == TOP else max_rows - rows
 
-            panels.append(self.new_window(x=x, 
-                                          y=y, 
-                                          rows=rows, 
-                                          columns=columns, 
-                                          name='{}_section_{}'.format(name, i),
-                                          corner=side))
+                    panels.append(self.new_window(x=x, 
+                                                  y=y, 
+                                                  rows=rows, 
+                                                  columns=columns, 
+                                                  name='{}_section_{}'.format(name, i),
+                                                  corner=side))
+
+        if len(panels) <= 0:
+            raise ValueError(name, num_panels, get_legend_dict, type_, shared_dimension, side, mini_options, full_options)
 
         self.legend_managers[name] = LegendManager(panels, get_legend_dict, type_)
         return(self.legend_managers[name])
+
+    def new_center_window(self, rows, columns, name, 
+                                output=None, set_focus=True, 
+                                overwrite=False, callback=[]):
+        if name == 'main': raise AttributeError('Cannot overwrite the main panel')
+
+        height, width = get_term_size()
+        if name in self.panels:
+            if not overwrite:
+                return(None)
+            else:
+                win = self._init_panel(WindowDimensions(x=(width / 2) - (columns / 2), 
+                                                        y=(height - rows) / 2, 
+                                                        rows=rows, columns=columns))
+                self.panels[name].replace(window=win.window)
+        else:
+            self.panels[name] = self._init_panel(WindowDimensions(x=(width / 2) - (columns / 2), 
+                                                                  y=(height - rows) / 2, 
+                                                                  rows=rows, columns=columns))
+
+        if output != None:
+            self.panels[name].print(output)
+        self.panels[name].set_focus() if set_focus else self.panels[name].hide()
+        return(self.panels[name])
 
     def new_window(self, x, y, rows, columns, name, 
                          output=None, set_focus=True, 
@@ -240,8 +350,8 @@ class Ui(object):
             if not update:
                 return(False)
 
-            old_reg = self.keymap[key_id]
-            keystroke_callable.calls.extend(old_reg.calls)
+            old_reg = self.keymap[keystroke_callable.key_id]
+            keystroke_callable.call.extend(old_reg.call)
 
         self.keymap[keystroke_callable.key_id] = keystroke_callable
         if not keystroke_callable.case_sensitive:
@@ -282,14 +392,18 @@ class Ui(object):
             self.spin()
 
     def spin(self):
+        # handle message bar
+        # if not self.message_bar.is_focus():
+        #     self.message_bar.set_focus()
+
         start = time.time()
         for panel_id, panel in self.panels.items():
             if panel_id != 'main':
                 panel.redraw_warning()
 
+        # self.message_bar.print(' Hit the space bar or ? to toggle the help window | Ctrl + c or Delete to quit ', post_clean=False)
         curses.panel.update_panels()
-        self.base_window.refresh()
-
+        curses.doupdate()
         stop = time.time()
         if not self.running_async:
             self._handle_keystokes(remaining_time=abs(self.refresh_rate - (stop - start)))
@@ -325,7 +439,6 @@ class Ui(object):
                                window_dimensions.y,
                                window_dimensions.x)
         panel = curses.panel.new_panel(window)
-        # window.nodelay(True)
 
         return(PanelManager(panel=panel,
                             window_dimensions=window_dimensions,

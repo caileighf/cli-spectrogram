@@ -34,12 +34,17 @@ class LegendManager(object):
         self.minimal_mode = False
         self.static_index = -1
         self.done_first_render = False
+        self.footer = None
+        self.do_update = True
 
     @property
     def legend_data(self):
         if self.minimal_mode:
             return(self.get_legend_dict()['__minimal__'])
         return(self.get_legend_dict())
+
+    def toggle_minimal_mode(self):
+        self.minimal_mode ^= True
 
     def _init_position(self):
         return(self.panels[0].corner)
@@ -52,6 +57,23 @@ class LegendManager(object):
             rows = p.rows
             columns = p.columns
         return(rows, columns)
+
+    def resize_panels(self, height=None, width=None):
+        rows, columns = get_term_size()
+        vert_shift = rows - height if height != None else 0
+        hori_shift = columns - width if width != None else 0
+        if height != None and self.static_index != -1:
+            for i, panel in enumerate(self.panels):
+                if i != self.static_index:
+                    panel.resize(WindowDimensions(x=panel.xy[0],
+                                                  y=panel.xy[1],
+                                                  rows=height,
+                                                  columns=panel.columns))
+                else:
+                    panel.resize(WindowDimensions(x=panel.xy[0],
+                                                  y=height,
+                                                  rows=rows - height,
+                                                  columns=panel.columns))
 
     def set_static_index(self, index):
         if index.isdigit():
@@ -70,11 +92,17 @@ class LegendManager(object):
         self.y_label = label
 
     def get_total_width(self, side):
+        if self.is_hidden():
+            return(0)
+
         if side == self.side:
             return(self.panels[0].columns)
         return(0)
 
     def get_total_height(self, side):
+        if self.is_hidden():
+            return(0)
+
         if side == self.side:
             return(self.panels[0].rows)
         return(0)
@@ -83,7 +111,7 @@ class LegendManager(object):
         return(self.panels[0].hline(ch=ch))
 
     def refresh(self):
-        [p.refresh() for p in self.panels]
+        [p.window.noutrefresh() for p in self.panels]
 
     def move_left(self):
         [p.move_left() for p in self.panels]
@@ -105,12 +133,16 @@ class LegendManager(object):
             self.side = self._init_position()
 
         data = self.legend_data
-        if self.type_ == SPLIT_V_STACK:
-            datertots = [data['UPPER'], data['LOWER']]
-        elif self.type_ == SPLIT_H_STACK:
-            datertots = [data['LEFT'], data['RIGHT']]
-        else:
-            datertots = [data]
+        try:
+            if self.type_ == SPLIT_V_STACK:
+                datertots = [data['UPPER'], data['LOWER']]
+            elif self.type_ == SPLIT_H_STACK:
+                datertots = [data['LEFT'], data['RIGHT']]
+            else:
+                datertots = [data]
+        except KeyError:
+            # return
+            raise ValueError(self.panels[0].window_dimensions.data)
 
         for data, p in zip(datertots, self.panels):
             p.pop_dict_buffer(data)
@@ -198,6 +230,10 @@ class LegendManager(object):
                         ])
                 if k[:2] != '__': p.buffer.append(p.hline(ch=' '))
 
+        if self.footer != None:
+            self.panels[0].buffer.append(self.panels[0].hline(ch='='))
+            self.panels[0].buffer.append([CursesPixel(text=' * {} *'.format(self.footer), fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD),])
+
 
 class PanelManager(object):
     """docstring for PanelManager
@@ -240,12 +276,16 @@ class PanelManager(object):
     @property
     def window(self):
         return(self.panel.window())
+
+    @property
+    def xy(self):
+        return(self.window_dimensions.x, self.window_dimensions.y)
     
     @property
     def x(self):
         if self.border_on:
-            return(2)
-        return(0)
+            return(2 + self.window_dimensions.x)
+        return(self.window_dimensions.x)
 
     @property
     def y(self):
@@ -345,8 +385,9 @@ class PanelManager(object):
         pass
 
     def refresh(self):
-        curses.panel.update_panels()
-        self.window.refresh()
+        pass
+        # curses.panel.update_panels()
+        # self.window.refresh()
     
     def clear_buffer(self):
         self.buffer.clear()
@@ -381,9 +422,10 @@ class PanelManager(object):
         for i, row in enumerate(self.buffer):
             if i > self.rows - 2: 
                 break
-            for pixel in row:
-                self.printch(ch=pixel.text, color=pixel.bg, attr=pixel.attr)
-            self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
+            if row != None:
+                for pixel in row:
+                    self.printch(ch=pixel.text, color=pixel.bg, attr=pixel.attr)
+                self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
         self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
 
         if not self.basic_buffer:
@@ -447,6 +489,10 @@ class PanelManager(object):
                     self.corner = LEFT
                 elif self.corner == LEFT and x <= max_columns:
                     self.corner = RIGHT
+                elif self.corner == TOP and y <= 0:
+                    self.corner = BOTTOM
+                elif self.corner == BOTTOM and y <= max_rows:
+                    self.corner = TOP
 
             self.log('''
                 User tried to resize window too fast!

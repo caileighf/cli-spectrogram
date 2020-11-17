@@ -73,7 +73,7 @@ class Specgram(object):
                        display_channel=0, 
                        threshold_db=90, 
                        markfreq_hz=5000, 
-                       threshold_steps=5, 
+                       threshold_steps=1, 
                        nfft=240,
                        sample_rate=19200,
                        file_length=1.0,
@@ -115,21 +115,33 @@ class Specgram(object):
         self.data = []
         self._init_keymap()
 
-        self.legend = ui.new_legend(name='specgram_legend', 
-                                    num_panels=2, 
-                                    get_legend_dict=self.legend_data, 
-                                    type_=SPLIT_V_STACK, 
-                                    shared_dimension=50, 
-                                    side=legend_side)
-        self.legend.set_x_label('Frequency (Hz)')
-        self.legend.set_y_label('Time (relative to file start)')
-        self.legend.set_static_index('LOWER')
+        self._init_legend(legend_side)
+        self.mini_legend_mode = False
         self.cached_legend_elements = {}
         for section, val in self.legend_data().items():
             for _, pairs in val.items():
                 [self.init_element_cache(element=elem_name) for elem_name in pairs.keys() if elem_name[:2] == '__']
 
         self.handle_plot_state_change(event='INITIAL_RESIZE')
+        self._init_ui_help()
+
+    def _init_legend(self, legend_side):
+      rows, _ = self.window.term_size
+      self.legend = self.ui.new_legend(name='specgram_legend', 
+                                       num_panels=2, 
+                                       get_legend_dict=self.legend_data, 
+                                       type_=SPLIT_V_STACK, 
+                                       shared_dimension=50, 
+                                       side=legend_side)
+
+      self.non_static_legend_height = 30
+      self.legend.set_static_index('LOWER')
+      # check if top legend can fit -- if not resize
+      if rows < self.non_static_legend_height * 2:
+        self.legend.resize_panels(height=self.non_static_legend_height)
+
+      self.legend.set_x_label('Frequency (Hz)')
+      self.legend.set_y_label('Time (relative to file start)')
 
     def _init_color(self, use_full_color):
         self.use_full_color = use_full_color
@@ -184,6 +196,10 @@ class Specgram(object):
                               key_name='H',
                               call=[self.toggle_legend],
                               case_sensitive=False),
+            KeystrokeCallable(key_id=ord('M'),
+                              key_name='M',
+                              call=[self.toggle_minimal_mode],
+                              case_sensitive=False),
             KeystrokeCallable(key_id=ord('R'),
                               key_name='R',
                               call=[self.reverse_color_map],
@@ -236,83 +252,112 @@ class Specgram(object):
         self.file_manager.close()
 
     def legend_data(self):
-        if self.legend.minimal_mode:
-            legend_dict = {
-                '__minimal__': {
-                        'Spectrogram Information': {
-                            'Threshold (dB)': self.threshold_db,
-                            'Sample Rate (Hz)': self.sample_rate,
-                            'Max Freq': self.argmax_freq,
-                            'NFFT': self.nfft,
-                            '__channel_bar__':
-                                self.create_channel_bar(),
-                            '__nav_mode_bar__': 
-                                self.create_nav_mode_bar(),
-                            '__intensity_bar__': 
-                                self.create_intensity_bar(),
-                        },
-                    },
-            }
-        else:
-            legend_dict = {
-                    'UPPER': {
-                        'File Information': {
-                            'File': self.file_manager.current_file.name,
-                            'Time': self.get_formatted_dt(),
-                            'Device Name': self.device_name,
-                            '__dataset_position_marker__':
-                                self.create_dataset_position_bar()
-                        },
-                        'Spectrogram Information': {
-                            'Threshold (dB)': self.threshold_db,
-                            'Sample Rate (Hz)': self.sample_rate,
-                            'Max Freq': self.argmax_freq,
-                            'NFFT': self.nfft,
-                            'Vertical Axis': self.legend.y_label,
-                            'Horizontal Axis': self.legend.x_label,
-                            '__channel_bar__':
-                                self.create_channel_bar(),
-                            '__nav_mode_bar__': 
-                                self.create_nav_mode_bar(),
-                            '__plot_mode_bar__':
-                                self.create_plot_mode_bar(),
-                            '__intensity_bar__': 
-                                self.create_intensity_bar(),
-                        },
-                    },
-                    'LOWER': {
-                        'Keyboard Shortcuts': {
-                            'Up / Down': 'Adjust color threshold by +/-{}dB'.format(self.threshold_steps),
-                            'Shift + (Up / Down)': 'Adjust NFFT by +/-{}'.format(self.nfft_step),
-                            'Left / Right': 'Move mark frequency by +/-100Hz',
-                            '__hline00__': self.legend.hline(ch=' '),
-                            'C / c': 'Cycle through channels',
-                            '__hline01__': self.legend.hline(ch=' '),
-                            'Pg Up / Pg Down': 'Previous file / Next file',
-                            'A / a': 'Move backwards 60 seconds / 10 seconds',
-                            'D / d': 'Move forwards 60 seconds / 10 seconds',
-                            'B / b': 'Jump to beginning of dataset',
-                            'E / e': 'Jump to end of dataset',
-                            'Escape': 'Resume streaming',
-                            '__hline02__': self.legend.hline(ch=' '),
-                            'Shift + Left': 'Move legend left',
-                            'Shift + Right': 'Move legend right',
-                            'H / h': 'Toggle keyboard shortcuts on / off',
-                            'F / f': 'Toggle full screen on / off',
-                            'X / x': 'Toggle window mode Stacked / Best Fit',
-                            'G / g': 'Toggle grayscale / full color',
-                            'R / r': 'Reverse color map',
-                        },
-                    },
-                }
-
+        legend_dict = {
+            'UPPER': {
+                'File Information': {
+                    'File': self.file_manager.current_file.name,
+                    'Time': str(self.get_formatted_dt()),
+                    'Device Name': self.device_name,
+                    '__dataset_position_marker__':
+                        self.create_dataset_position_bar()
+                },
+                'Spectrogram Information': {
+                    'Threshold (dB)': self.threshold_db,
+                    'Sample Rate (Hz)': self.sample_rate,
+                    'Max Freq': self.argmax_freq,
+                    'NFFT': self.nfft,
+                    'Vertical Axis': self.legend.y_label,
+                    'Horizontal Axis': self.legend.x_label,
+                    '__channel_bar__':
+                        self.create_channel_bar(),
+                    '__nav_mode_bar__': 
+                        self.create_nav_mode_bar(),
+                    '__plot_mode_bar__':
+                        self.create_plot_mode_bar(),
+                    '__intensity_bar__': 
+                        self.create_intensity_bar(),
+                },
+            },
+            'LOWER': {
+                'Keyboard Shortcuts': {
+                    'Up / Down': 'Adjust color threshold by +/-{}dB'.format(self.threshold_steps),
+                    'Shift + (Up / Down)': 'Adjust NFFT by +/-{}'.format(self.nfft_step),
+                    'Left / Right': 'Move mark frequency by +/-100Hz',
+                    'C / c': 'Cycle through channels',
+                    'Pg Up / Pg Down': 'Previous file / Next file',
+                    'A / a': 'Move backwards 60 seconds / 10 seconds',
+                    'D / d': 'Move forwards 60 seconds / 10 seconds',
+                    'B / b': 'Jump to beginning of dataset',
+                    'E / e': 'Jump to end of dataset',
+                    'Escape': 'Resume streaming',
+                    '__hline02__': self.legend.hline(ch=' '),
+                    'Shift + Left': 'Move legend left',
+                    'Shift + Right': 'Move legend right',
+                    'H / h': 'Toggle keyboard shortcuts on / off',
+                    'F / f': 'Toggle full screen on / off',
+                    'G / g': 'Toggle grayscale / full color',
+                    'R / r': 'Reverse color map',
+                },
+            },
+            '__minimal__': {
+                'Spectrogram Information': {
+                    'Time': str(self.get_formatted_dt()),
+                    '__date_time_bar__': self.create_dt_bar(),
+                    'Threshold (dB)': self.threshold_db,
+                    'Sample Rate (Hz)': self.sample_rate,
+                    'Max Freq': self.argmax_freq,
+                    'NFFT': self.nfft,
+                    '__channel_bar__':
+                        self.create_channel_bar(),
+                    '__nav_mode_bar__': 
+                        self.create_nav_mode_bar(),
+                    '__intensity_bar__': 
+                        self.create_intensity_bar(),
+                },
+            },
+        }
         return(legend_dict)
+
+    def _init_ui_help(self):
+        help_ = self.get_formatted_kb_shortcuts()
+        rc = self.ui.set_help_info(info=help_, title='Spectrogram Keyboard Shortcuts')
+        return(rc)
+
+    def get_formatted_kb_shortcuts(self):
+        return(self.legend_data()['LOWER']['Keyboard Shortcuts'])
 
     def handle_config(self, key):
         pass
 
+    def handle_minimal_mode(self, *args):
+        if hasattr(self, 'mini_legend'):
+            if self.mini_legend_mode:
+                self.mini_legend.show_all()
+                self.legend.hide_all()
+            else:
+                self.mini_legend.hide_all()
+                self.legend.show_all()
+        else:
+            self.legend.hide_all()
+            self.mini_legend = self.ui.new_legend(name='specgram_mini_legend', 
+                                                  num_panels=1, 
+                                                  get_legend_dict=self.legend_data, 
+                                                  type_=SINGLE_H, 
+                                                  shared_dimension=50, 
+                                                  side=TOP_RIGHT)
+            self.mini_legend.minimal_mode = True
+            self.ui.add_legend_manager(name='specgram_mini_legend', manager=self.mini_legend)
+        self.invalidate_cache()
+        if self.ui.get_panel_mode() == 'Best Fit':
+            self.ui.toggle_overlap_mode()
+
+    def toggle_minimal_mode(self, *args):
+        self.mini_legend_mode ^= True
+        self.handle_minimal_mode()
+
     def handle_position_cache(self):
         self.cached_legend_elements['__dataset_position_marker__']['is_valid'] = False
+        self.cached_legend_elements['__date_time_bar__']['is_valid'] = False
         self.cached_legend_elements['__nav_mode_bar__']['is_valid'] = False
 
     def handle_plot_attrs_cache(self):
@@ -320,6 +365,7 @@ class Specgram(object):
 
     def invalidate_cache(self):
         self.cached_legend_elements['__dataset_position_marker__']['is_valid'] = False
+        self.cached_legend_elements['__date_time_bar__']['is_valid'] = False
         self.cached_legend_elements['__nav_mode_bar__']['is_valid'] = False
         self.cached_legend_elements['__intensity_bar__']['is_valid'] = False
         self.cached_legend_elements['__channel_bar__']['is_valid'] = False
@@ -357,6 +403,9 @@ class Specgram(object):
             elif key.key_id == ESC:
                 self.handle_position_cache()
                 cursor_pos = self.file_manager.move_to_end()
+                if self.mini_legend_mode:
+                    self.toggle_minimal_mode()
+                # self.ui.revert_to_original_mode()
             elif key.key_id == KEY_LEFT or key.key_id == KEY_RIGHT:
                 if key.key_id == KEY_RIGHT:
                     self.markfreq_hz += 100
@@ -395,6 +444,21 @@ class Specgram(object):
             'element': None,
         }
 
+    def create_dt_bar(self):
+        if '__date_time_bar__' in self.cached_legend_elements:
+            if self.cached_legend_elements['__date_time_bar__']['is_valid']:
+                return(self.cached_legend_elements['__date_time_bar__']['element'])
+        else:
+            self.init_element_cache(element='__date_time_bar__')
+
+        if self.mini_legend_mode:
+            legend = self.mini_legend
+        else:
+            legend = self.legend
+
+        dt = self.get_formatted_dt()
+        dt_bar = []
+
     def create_dataset_position_bar(self):
         if '__dataset_position_marker__' in self.cached_legend_elements:
             if self.cached_legend_elements['__dataset_position_marker__']['is_valid']:
@@ -402,13 +466,18 @@ class Specgram(object):
         else:
             self.init_element_cache(element='__dataset_position_marker__')
 
+        if self.mini_legend_mode:
+            legend = self.mini_legend
+        else:
+            legend = self.legend
+
         if self.file_manager.is_streaming():
             return([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)])
 
         top_bar = [CursesPixel(text='  ', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)]
         bottom_bar = [CursesPixel(text='  ', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)]
-        for i in range(int(self.file_manager.total_files * ((self.legend.columns - 4) / self.file_manager.total_files))):
-            ioi = i == int(self.file_manager.current_position * ((self.legend.columns - 4) / self.file_manager.total_files))
+        for i in range(int(self.file_manager.total_files * ((legend.columns - 4) / self.file_manager.total_files))):
+            ioi = i == int(self.file_manager.current_position * ((legend.columns - 4) / self.file_manager.total_files))
             top_bar.append(
                     CursesPixel(text='|' if ioi else '_', 
                                 fg=-1, 
@@ -435,6 +504,11 @@ class Specgram(object):
                 return(self.cached_legend_elements['__channel_bar__']['element'])
         else:
             self.init_element_cache(element='__channel_bar__')
+
+        if self.mini_legend_mode:
+            legend = self.mini_legend
+        else:
+            legend = self.legend
 
         top_bar = []
         bottom_bar = []
@@ -468,6 +542,11 @@ class Specgram(object):
         else:
             self.init_element_cache(element='__plot_mode_bar__')
 
+        if self.mini_legend_mode:
+            legend = self.mini_legend
+        else:
+            legend = self.legend
+
         mode_bar = []
         if self.ui.get_panel_mode() == 'Stacked':
             color = self.accent_color[1]
@@ -476,7 +555,7 @@ class Specgram(object):
         else:
             color = self.accent_color[2]
         mode_bar.extend([
-                CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(self.legend.columns), 
+                CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
         self.cached_legend_elements['__plot_mode_bar__']['element'] = mode_bar
@@ -490,6 +569,11 @@ class Specgram(object):
         else:
             self.init_element_cache(element='__nav_mode_bar__')
 
+        if self.mini_legend_mode:
+            legend = self.mini_legend
+        else:
+            legend = self.legend
+
         mode_bar = []
         if self.file_manager.state == 'Streaming':
             color = self.accent_color[0]
@@ -498,7 +582,7 @@ class Specgram(object):
         else:
             color = self.accent_color[2]
         mode_bar.extend([
-                CursesPixel(text='Nav Mode: {}'.format(self.file_manager.state).center(self.legend.columns), 
+                CursesPixel(text='Nav Mode: {}'.format(self.file_manager.state).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
         self.cached_legend_elements['__nav_mode_bar__']['element'] = mode_bar
@@ -512,10 +596,15 @@ class Specgram(object):
         else:
             self.init_element_cache(element='__intensity_bar__')
 
+        if self.mini_legend_mode:
+            legend = self.mini_legend
+        else:
+            legend = self.legend
+
         intensity_bar = []
         intensity_bar.extend([
-                CursesPixel(text='  Quietest'.ljust(int(self.legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text='Loudest  '.rjust(int(self.legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text='  Quietest'.ljust(int(legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text='Loudest  '.rjust(int(legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
             ])
         intensity_bar.extend([
                 CursesPixel(text=' ' * int(self.legend.columns / 5), fg=-1, bg=self.color[0], attr=A_BOLD),
@@ -530,9 +619,9 @@ class Specgram(object):
         current_dB = '{}dB'.format(self.threshold_db)
         upper_bound = '{}dB '.format(self.threshold_db + self.threshold_steps * 2)
         intensity_bar.extend([
-                CursesPixel(text=lower_bound.ljust(int(self.legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text=current_dB.center(int(self.legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text=upper_bound.rjust(int(self.legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=lower_bound.ljust(int(legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=current_dB.center(int(legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=upper_bound.rjust(int(legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
             ])
         intensity_bar.extend([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)])
         self.cached_legend_elements['__intensity_bar__']['element'] = intensity_bar
@@ -544,7 +633,7 @@ class Specgram(object):
             dt = datetime.datetime.fromtimestamp(float(self.file_manager.current_file.stem))
         except:
             dt = None
-        return(str(dt))
+        return(dt)
 
     def cycle_channels(self, key):
         self.cached_legend_elements['__channel_bar__']['is_valid'] = False
@@ -565,8 +654,14 @@ class Specgram(object):
         self.full_screen_mode ^= True # toggle
         if self.full_screen_mode:
             self.legend.hide_all()
+            if self.ui.get_panel_mode() == 'Best Fit':
+                self.ui.toggle_overlap_mode()
         else:
             self.legend.show_all()
+            if self.mini_legend_mode:
+                self.toggle_minimal_mode()
+            # if self.ui.get_panel_mode() == 'Stacked':
+            #     self.ui.toggle_overlap_mode()
         self.window.refresh()
 
     def toggle_legend(self, args):
