@@ -34,6 +34,8 @@ class LegendManager(object):
         self.minimal_mode = False
         self.static_index = -1
         self.done_first_render = False
+        self.footer = None
+        self.do_update = True
 
     @property
     def legend_data(self):
@@ -55,6 +57,23 @@ class LegendManager(object):
             rows = p.rows
             columns = p.columns
         return(rows, columns)
+
+    def resize_panels(self, height=None, width=None):
+        rows, columns = get_term_size()
+        vert_shift = rows - height if height != None else 0
+        hori_shift = columns - width if width != None else 0
+        if height != None and self.static_index != -1:
+            for i, panel in enumerate(self.panels):
+                if i != self.static_index:
+                    panel.resize(WindowDimensions(x=panel.xy[0],
+                                                  y=panel.xy[1],
+                                                  rows=height,
+                                                  columns=panel.columns))
+                else:
+                    panel.resize(WindowDimensions(x=panel.xy[0],
+                                                  y=height,
+                                                  rows=rows - height,
+                                                  columns=panel.columns))
 
     def set_static_index(self, index):
         if index.isdigit():
@@ -92,7 +111,7 @@ class LegendManager(object):
         return(self.panels[0].hline(ch=ch))
 
     def refresh(self):
-        [p.noutrefresh() for p in self.panels]
+        [p.window.noutrefresh() for p in self.panels]
 
     def move_left(self):
         [p.move_left() for p in self.panels]
@@ -211,6 +230,10 @@ class LegendManager(object):
                         ])
                 if k[:2] != '__': p.buffer.append(p.hline(ch=' '))
 
+        if self.footer != None:
+            self.panels[0].buffer.append(self.panels[0].hline(ch='='))
+            self.panels[0].buffer.append([CursesPixel(text=' * {} *'.format(self.footer), fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD),])
+
 
 class PanelManager(object):
     """docstring for PanelManager
@@ -253,12 +276,16 @@ class PanelManager(object):
     @property
     def window(self):
         return(self.panel.window())
+
+    @property
+    def xy(self):
+        return(self.window_dimensions.x, self.window_dimensions.y)
     
     @property
     def x(self):
         if self.border_on:
-            return(2)
-        return(0)
+            return(2 + self.window_dimensions.x)
+        return(self.window_dimensions.x)
 
     @property
     def y(self):

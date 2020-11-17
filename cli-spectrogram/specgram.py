@@ -115,15 +115,7 @@ class Specgram(object):
         self.data = []
         self._init_keymap()
 
-        self.legend = ui.new_legend(name='specgram_legend', 
-                                    num_panels=2, 
-                                    get_legend_dict=self.legend_data, 
-                                    type_=SPLIT_V_STACK, 
-                                    shared_dimension=50, 
-                                    side=legend_side)
-        self.legend.set_x_label('Frequency (Hz)')
-        self.legend.set_y_label('Time (relative to file start)')
-        self.legend.set_static_index('LOWER')
+        self._init_legend(legend_side)
         self.mini_legend_mode = False
         self.cached_legend_elements = {}
         for section, val in self.legend_data().items():
@@ -131,6 +123,25 @@ class Specgram(object):
                 [self.init_element_cache(element=elem_name) for elem_name in pairs.keys() if elem_name[:2] == '__']
 
         self.handle_plot_state_change(event='INITIAL_RESIZE')
+        self._init_ui_help()
+
+    def _init_legend(self, legend_side):
+      rows, _ = self.window.term_size
+      self.legend = self.ui.new_legend(name='specgram_legend', 
+                                       num_panels=2, 
+                                       get_legend_dict=self.legend_data, 
+                                       type_=SPLIT_V_STACK, 
+                                       shared_dimension=50, 
+                                       side=legend_side)
+
+      self.non_static_legend_height = 30
+      self.legend.set_static_index('LOWER')
+      # check if top legend can fit -- if not resize
+      if rows < self.non_static_legend_height * 2:
+        self.legend.resize_panels(height=self.non_static_legend_height)
+
+      self.legend.set_x_label('Frequency (Hz)')
+      self.legend.set_y_label('Time (relative to file start)')
 
     def _init_color(self, use_full_color):
         self.use_full_color = use_full_color
@@ -272,9 +283,7 @@ class Specgram(object):
                     'Up / Down': 'Adjust color threshold by +/-{}dB'.format(self.threshold_steps),
                     'Shift + (Up / Down)': 'Adjust NFFT by +/-{}'.format(self.nfft_step),
                     'Left / Right': 'Move mark frequency by +/-100Hz',
-                    '__hline00__': self.legend.hline(ch=' '),
                     'C / c': 'Cycle through channels',
-                    '__hline01__': self.legend.hline(ch=' '),
                     'Pg Up / Pg Down': 'Previous file / Next file',
                     'A / a': 'Move backwards 60 seconds / 10 seconds',
                     'D / d': 'Move forwards 60 seconds / 10 seconds',
@@ -286,7 +295,6 @@ class Specgram(object):
                     'Shift + Right': 'Move legend right',
                     'H / h': 'Toggle keyboard shortcuts on / off',
                     'F / f': 'Toggle full screen on / off',
-                    'X / x': 'Toggle window mode Stacked / Best Fit',
                     'G / g': 'Toggle grayscale / full color',
                     'R / r': 'Reverse color map',
                 },
@@ -309,6 +317,14 @@ class Specgram(object):
             },
         }
         return(legend_dict)
+
+    def _init_ui_help(self):
+        help_ = self.get_formatted_kb_shortcuts()
+        rc = self.ui.set_help_info(info=help_, title='Spectrogram Keyboard Shortcuts')
+        return(rc)
+
+    def get_formatted_kb_shortcuts(self):
+        return(self.legend_data()['LOWER']['Keyboard Shortcuts'])
 
     def handle_config(self, key):
         pass
