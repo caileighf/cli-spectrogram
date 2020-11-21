@@ -42,6 +42,9 @@ _DARK_GREY = 237
 _DARKEST_GREY = 235
 _BLACK = 233
 
+def init_mouse():
+    curses.mousemask(-1)
+
 def init_color_pairs():
     curses.use_default_colors()
     # default values for specgram plot

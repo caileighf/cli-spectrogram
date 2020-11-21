@@ -54,6 +54,10 @@ from curses import (COLOR_YELLOW,
                     A_BOLD,
                     A_UNDERLINE,
                     A_NORMAL,
+                    A_BLINK,
+                    A_REVERSE,
+                    A_STANDOUT,
+                    KEY_MOUSE,
                     KEY_PPAGE,
                     KEY_NPAGE,
                     KEY_UP,
@@ -113,6 +117,10 @@ class Specgram(object):
         self.current_file = self.file_manager.next_file()
         self.device_name = device_name
         self.data = []
+        self.current_rows = []
+        self.current_axis = []
+        self.is_scroll_active = False
+        self.scroll_line_index = {'top': 0, 'bottom': 0}
         self._init_keymap()
 
         self._init_legend(legend_side)
@@ -157,6 +165,33 @@ class Specgram(object):
     def toggle_grayscale(self, *args):
         self._init_color(use_full_color=not self.use_full_color)
         self.invalidate_cache()
+
+    def toggle_scroll_mode(self, *args):
+        self.is_scroll_active ^= True
+        self.scroll_line_index['top'] = 0
+        self.scroll_line_index['bottom'] = self.window.rows
+
+    def handle_mouse_event(self, *args):
+        if not self.is_scroll_active:
+            self.toggle_scroll_mode()
+
+        _id, x, y, z, mouse_state = args
+        if mouse_state == 134217728:
+            self.scroll(20)
+        elif mouse_state == 524288:
+            self.scroll(-20)
+
+    def scroll(self, lines):
+        if lines > 0:
+            if self.scroll_line_index['top'] > 9:
+                self.scroll_line_index['top'] -= lines
+                self.scroll_line_index['bottom'] -= lines
+        else:
+            lines *= -1
+            if self.scroll_line_index['bottom'] < len(self.current_rows):
+                self.scroll_line_index['top'] += lines
+                self.scroll_line_index['bottom'] += lines
+
 
     def reverse_color_map(self, *args):
         self.color.reverse()
@@ -204,6 +239,10 @@ class Specgram(object):
                               key_name='R',
                               call=[self.reverse_color_map],
                               case_sensitive=False),
+            KeystrokeCallable(key_id=ord('S'),
+                              key_name='S',
+                              call=[self.toggle_scroll_mode],
+                              case_sensitive=False),
             KeystrokeCallable(key_id=Q_MARK,
                               key_name='?',
                               call=[self.handle_config]),
@@ -240,6 +279,10 @@ class Specgram(object):
             KeystrokeCallable(key_id=ESC,
                               key_name='Escape',
                               call=[self.handle_navigation]),
+            KeystrokeCallable(key_id=KEY_MOUSE,
+                              key_name='Mouse Event',
+                              call=[self.handle_mouse_event],
+                              case_sensitive=False),
         ]
         for key in self.keymap:
             self.register_keystroke_callable(keystroke_callable=key, update=True)
@@ -675,10 +718,15 @@ class Specgram(object):
             elif not self.force_redraw:
                 return
 
-        formatted_data = self.format_data(self.get_plot_dimensions())
+        formatted_data = self.format_data(self.get_plot_dimensions(), shrink_to_fit=not self.is_scroll_active)
         self.window.clear_buffer()
-        for row in formatted_data:
-            self.window.buffer.append(row)
+
+        if self.is_scroll_active:
+            for row in formatted_data[self.scroll_line_index['top']: self.scroll_line_index['bottom']]:
+                self.window.buffer.append(row)
+        else:
+            for row in formatted_data:
+                self.window.buffer.append(row)
 
     def get_data(self):
         self.current_file = self.file_manager.next_file()
@@ -754,16 +802,27 @@ class Specgram(object):
             formatted_row.append(CursesPixel(text=line[i], fg=COLOR_BLACK, bg=COLOR_BLACK, attr=attr))
         return(formatted_row)
 
-    def format_data(self, term_size):
+    def format_data(self, term_size, shrink_to_fit=True):
         # make sure nfft will work for current term size
         self.handle_nfft()
+        is_data_file_empty = False
         # create matrix with color for dB intensity that fits in alloted rows
         try:
-            axis, rows = self.fit_data(*self.create_specgram())
+            axis, rows = self.create_specgram()
+            self.current_axis = axis
+            self.current_rows = rows
+
+            if shrink_to_fit:
+                axis, rows = self.fit_data(axis, rows)
+
         except ValueError:
             # TODO handle values too low error with popup error
             return([])
-
+        except ZeroDivisionError:
+            # Empty data file!
+            is_data_file_empty = True
+            error_text = 'THIS DATA FILE IS EMPTY!'.center(self.window.columns)
+            
         freqlist = numpy.fft.fftfreq(self.nfft) * self.sample_rate
         maxfreq = freqlist[int(self.nfft / 2 - 1)]
         minfreq = freqlist[1]
@@ -795,6 +854,10 @@ class Specgram(object):
                     formatted_row.append(CursesPixel(text='|', fg=COLOR_BLACK, bg=color, attr=A_BOLD))
             formatted_data.append(formatted_row)
 
+        if is_data_file_empty:
+            formatted_data.append([CursesPixel(text=' ', fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_NORMAL)])
+            formatted_data.append([CursesPixel(text=error_text, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_BOLD | A_BLINK)])
+
         # append x-axis data to output buffer in reverse order
         formatted_data.append(formatted_border_line)
         formatted_data.append(formatted_info_line)
@@ -822,8 +885,12 @@ class Specgram(object):
         return(results)
 
     def fit_data(self, axis, rows):
+        # try:
         return(self.downsample_to_max(axis, self.window.columns), 
                self.downsample_to_max(rows, self.window.columns))
+        # except ZeroDivisionError:
+        #     # TODO Show error to user that voltages are too low to make specgram
+        #     return(axis, rows)
 
     def create_specgram(self):
         done = False

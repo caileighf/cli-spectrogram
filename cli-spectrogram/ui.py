@@ -27,6 +27,7 @@ from common import (
         get_term_size, 
         get_fitted_window,
         init_color_pairs,
+        init_mouse,
         ESC,
         Q_MARK
     )
@@ -54,6 +55,7 @@ class Ui(object):
     def __init__(self, stdscr, refresh_hz=0):
         super(Ui, self).__init__()
         init_color_pairs()
+        init_mouse()
         self.running_async = False
         self.key_buffer = deque()
         self.base_window = stdscr
@@ -408,10 +410,10 @@ class Ui(object):
         if not self.running_async:
             self._handle_keystokes(remaining_time=abs(self.refresh_rate - (stop - start)))
 
-        self.log_keystroke(KeystrokeCallable(key_id=-1,
-                                             key_name='spin() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
-                                             call=[],
-                                             case_sensitive=True))
+        # self.log_keystroke(KeystrokeCallable(key_id=-1,
+        #                                      key_name='spin() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
+        #                                      call=[],
+        #                                      case_sensitive=True))
 
     def log(self, output, end='\n'):
         with open('debug.log', 'a+') as f:
@@ -455,24 +457,20 @@ class Ui(object):
             if key != -1:
                 if key in self.keymap:
                     start_key_timer = time.time()
-                    [func(self.keymap[key]) for func in self.keymap[key].call]
+                    if key == curses.KEY_MOUSE:
+                        args = curses.getmouse()
+                        [func(*args) for func in self.keymap[key].call]
+                    else:
+                        [func(self.keymap[key]) for func in self.keymap[key].call]
                     stop_key_timer = time.time()
-                    self.log_keystroke(KeystrokeCallable(key_id=self.keymap[key].key_id,
-                                                         key_name='Timer for: {} --> {} seconds'.format(self.keymap[key].key_name,
-                                                                                                        '%.3f' % (stop_key_timer - start_key_timer)),
-                                                         call=[],
-                                                         case_sensitive=True))
 
-                if key not in self.keymap:
+                else:
+                    # curses.flash()
                     self.log_keystroke(KeystrokeCallable(key_id=-1,
-                                                         key_name='ERROR Unregistered key: {}'.format(key),
+                                                         key_name='ERROR Unregistered key: {}'.format(curses.keyname(key)),
                                                          call=[],
                                                          case_sensitive=True))
         stop = time.time()
-        self.log_keystroke(KeystrokeCallable(key_id=-1,
-                                             key_name='_handle_keystokes() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
-                                             call=[],
-                                             case_sensitive=True))
 
     def _kill(self, *arg):
         raise KeyboardInterrupt
