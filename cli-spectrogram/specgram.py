@@ -122,6 +122,8 @@ class Specgram(object):
         self.current_rows = []
         self.current_axis = []
         self.is_scroll_active = False
+        self.scroll_up_step = -15
+        self.scroll_dn_step = 15
         self.scroll_line_index = {'top': 0, 'bottom': 0}
         self._init_keymap()
 
@@ -185,18 +187,28 @@ class Specgram(object):
     def handle_mouse_event(self, *args):
         lines_to_scroll = 0
         _id, x, y, z, mouse_state = args
+        dir_switch = False
         if mouse_state == 134217728:
-            lines_to_scroll = 15
+            lines_to_scroll = self.scroll_up_step
             self.log('Scroll UP')
         elif mouse_state == 524288:
-            lines_to_scroll = -15
+            lines_to_scroll = self.scroll_dn_step
             self.log('Scroll DOWN')
+        elif mouse_state == 128:
+            # switching scrolling direction!
+            self.scroll_dn_step *= -1
+            self.scroll_up_step *= -1
+            self.log('Switching directions!')
+            dir_switch = True
 
         if not self.is_scroll_active and lines_to_scroll != 0:
             self.toggle_scroll_mode()
 
-        self.scroll(lines_to_scroll)
-        self.log('scroll_line_index: top: {} bottom: {}'.format(self.scroll_line_index['top'], self.scroll_line_index['bottom']))
+        if not dir_switch:
+            self.scroll(lines_to_scroll)
+            self.log('scroll_line_index: top: {} bottom: {}'.format(self.scroll_line_index['top'], self.scroll_line_index['bottom']))
+        else:
+            self.ui.flash_message(output=['Switching scroll directions!'], duration_sec=1.5)
 
     def scroll(self, lines):
         if lines > 0:
@@ -414,6 +426,7 @@ class Specgram(object):
                                                   side=TOP_RIGHT)
             self.mini_legend.minimal_mode = True
             self.ui.add_legend_manager(name='specgram_mini_legend', manager=self.mini_legend)
+
         self.invalidate_cache()
         if self.ui.get_panel_mode() == 'Best Fit':
             self.ui.toggle_overlap_mode()
@@ -421,6 +434,8 @@ class Specgram(object):
     def toggle_minimal_mode(self, *args):
         self.mini_legend_mode ^= True
         self.handle_minimal_mode()
+        if self.mini_legend_mode:
+            self.ui.flash_message(output=['Minimal Legend Mode Active'], duration_sec=1.0)
 
     def handle_position_cache(self):
         self.cached_legend_elements['__dataset_position_marker__']['is_valid'] = False
@@ -437,6 +452,7 @@ class Specgram(object):
         self.cached_legend_elements['__intensity_bar__']['is_valid'] = False
         self.cached_legend_elements['__channel_bar__']['is_valid'] = False
         self.cached_legend_elements['__plot_mode_bar__']['is_valid'] = False
+        self.cached_legend_elements['__scroll_mode_bar__']['is_valid'] = False
 
     def handle_navigation(self, key):
         start = time.time()

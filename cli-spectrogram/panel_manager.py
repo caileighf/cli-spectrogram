@@ -462,10 +462,13 @@ class PanelManager(object):
         if post_clean and not self.basic_buffer:
             self.clean_window()
 
-    def print_line(self, line, x, y, end='\n'):
+    def print_line(self, line, x, y, end='\n', center=False):
         _, columns = get_term_size()
         try:
-            self.window.addnstr(y, x, '{}{}'.format(line, end), columns-5)
+            if center:
+                self.window.addnstr(y, x, '{}{}'.format(line.center(self.columns-4), end), columns-5)
+            else:
+                self.window.addnstr(y, x, '{}{}'.format(line, end), columns-5)
         except curses.error:
             pass
 

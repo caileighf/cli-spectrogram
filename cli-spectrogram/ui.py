@@ -75,6 +75,11 @@ class Ui(object):
         # set base window to nodelay so getch will be non-blocking
         self.base_window.nodelay(True)
         curses.curs_set(False)
+        # create flash message window
+        self.new_center_window(rows=10, columns=50, name='flash_message')
+        self.panels['flash_message'].border()
+        self.panels['flash_message'].set_basic_buffer()
+        self.panels['flash_message'].hide()
 
     @property
     def main_window(self):
@@ -291,6 +296,23 @@ class Ui(object):
         self.legend_managers[name] = LegendManager(panels, get_legend_dict, type_)
         return(self.legend_managers[name])
 
+    def flash_message(self, output, duration_sec=1.0, flash_screen=True):
+        if flash_screen:
+            curses.flash()
+
+        self.panels['flash_message'].show()
+        self.panels['flash_message'].set_focus()
+
+        if not isinstance(output, list): output = [output]
+        for i, line in enumerate(output):
+            self.panels['flash_message'].print_line(line, 2, i+1, end='', center=True)
+
+        curses.panel.update_panels()
+        curses.doupdate()
+        time.sleep(duration_sec)
+        
+        self.panels['flash_message'].hide()
+
     def new_center_window(self, rows, columns, name, 
                                 output=None, set_focus=True, 
                                 overwrite=False, callback=[]):
@@ -481,6 +503,7 @@ def test(stdscr):
     ui = Ui(stdscr=stdscr, refresh_hz=0.1)
     i = 0
     step = 1
+    ui.flash_message(output=['Flash!'])
     while True:
         start = time.time()
         rows, columns = get_term_size()
@@ -491,6 +514,13 @@ def test(stdscr):
                 pan.hide()
                 ui.spin()
         if i != 0 and i % 15 == 0:
+            ui.flash_message(output=[
+                    'Flash!',
+                    'Flash!',
+                    'Flash!',
+                    'Flash!',
+                    'Flash!',
+                ])
             i = random.randint(0, 30)
             if i % 2 == 0:
                 step = 1

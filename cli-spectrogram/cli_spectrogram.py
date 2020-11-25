@@ -50,33 +50,7 @@ def handle_config(args):
 
     return(args)
 
-def main(stdscr):
-    parser = argparse.ArgumentParser(description='cli-spectrogram')
-    parser.add_argument('--sample-rate', help='', required=False, type=float)
-    parser.add_argument('--device-name', help='', default=None, type=str)
-    parser.add_argument('--file-length', help='in seconds', required=False, type=float)
-    parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
-    parser.add_argument('--skip-empty', action='store_true', help='Skip empty data files -- do not show gaps', required=False)
-    parser.add_argument('-r', '--right-hand-legend', action='store_true', 
-                        help='Orient the legend to stick to the right side (default: left)', required=False)
-    parser.add_argument('--stacked-mode', action='store_true', help='Start in stacked-mode', required=False)
-    parser.add_argument('--source', help='Source directory with .txt files', required=False)
-    parser.add_argument('--threshold-steps', help='How many dB above and below threshold', required=False, type=int)
-    parser.add_argument('-c','--display-channel', help='', required=False, type=int, choices=range(0, 8))
-    parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
-    parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
-    parser.add_argument('--nfft', help='', required=False, type=int)
-    parser.add_argument('--use-config', help='Use config file', action='store_true')    
-    parser.set_defaults(source=os.getcwd(), 
-                        display_channel=0, 
-                        threshold_db=85, 
-                        markfreq_hz=5000, 
-                        threshold_steps=5, 
-                        nfft=240,
-                        sample_rate=19200,
-                        file_length=1.0)
-    args = parser.parse_args()
-
+def main(stdscr, args):
     if args.use_config:
         args = handle_config(args)
 
@@ -104,8 +78,34 @@ def main(stdscr):
         specgram.close()
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='cli-spectrogram')
+    parser.add_argument('--sample-rate', help='', required=False, type=float)
+    parser.add_argument('--device-name', help='', default=None, type=str)
+    parser.add_argument('--file-length', help='in seconds', required=False, type=float)
+    parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
+    parser.add_argument('--skip-empty', action='store_true', help='Skip empty data files -- do not show gaps', required=False)
+    parser.add_argument('-r', '--right-hand-legend', action='store_true', 
+                        help='Orient the legend to stick to the right side (default: left)', required=False)
+    parser.add_argument('--stacked-mode', action='store_true', help='Start in stacked-mode', required=False)
+    parser.add_argument('--source', help='Source directory with .txt files', required=False)
+    parser.add_argument('--threshold-steps', help='How many dB above and below threshold', required=False, type=int)
+    parser.add_argument('-c','--display-channel', help='', required=False, type=int, choices=range(0, 8))
+    parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
+    parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
+    parser.add_argument('--nfft', help='', required=False, type=int)
+    parser.add_argument('--use-config', help='Use config file', action='store_true')    
+    parser.set_defaults(source=os.getcwd(), 
+                        display_channel=0, 
+                        threshold_db=85, 
+                        markfreq_hz=5000, 
+                        threshold_steps=5, 
+                        nfft=240,
+                        sample_rate=19200,
+                        file_length=1.0)
+    args = parser.parse_args()
+
     try:
-        curses.wrapper(main)
+        curses.wrapper(main, args)
     except KeyboardInterrupt:
         pass
     finally:
