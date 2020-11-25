@@ -81,7 +81,8 @@ class Specgram(object):
                        nfft=240,
                        sample_rate=19200,
                        file_length=1.0,
-                       use_full_color=True):
+                       use_full_color=True,
+                       skip_empty=False):
         super(Specgram, self).__init__()
         self.ui = ui # ui instance for creating plot window and legend windows
         self.window = ui.new_full_size_window(name='specgram_plot')
@@ -113,7 +114,8 @@ class Specgram(object):
         self.full_screen_mode = False
         self._init_color(use_full_color)
 
-        self.file_manager = FileNavManager(data_dir=self.source)
+        self.skip_empty = skip_empty
+        self.file_manager = FileNavManager(data_dir=self.source, skip_empty=skip_empty)
         self.current_file = self.file_manager.next_file()
         self.device_name = device_name
         self.data = []
@@ -135,18 +137,26 @@ class Specgram(object):
 
     def _init_legend(self, legend_side):
       rows, _ = self.window.term_size
+      # self.legend = self.ui.new_legend(name='specgram_legend', 
+      #                                  num_panels=2, 
+      #                                  get_legend_dict=self.legend_data, 
+      #                                  type_=SPLIT_V_STACK, 
+      #                                  shared_dimension=50, 
+      #                                  side=legend_side)
       self.legend = self.ui.new_legend(name='specgram_legend', 
-                                       num_panels=2, 
+                                       num_panels=1, 
                                        get_legend_dict=self.legend_data, 
-                                       type_=SPLIT_V_STACK, 
+                                       type_=SINGLE_V, 
                                        shared_dimension=50, 
                                        side=legend_side)
+      self.legend.default_key = 'UPPER'
+      self.legend.footer = 'Show ALL keyboard shortcuts with ? or space'
 
-      self.non_static_legend_height = 30
-      self.legend.set_static_index('LOWER')
-      # check if top legend can fit -- if not resize
-      if rows < self.non_static_legend_height * 2:
-        self.legend.resize_panels(height=self.non_static_legend_height)
+      # self.non_static_legend_height = 30
+      # self.legend.set_static_index('LOWER')
+      # # check if top legend can fit -- if not resize
+      # if rows < self.non_static_legend_height * 2:
+      #   self.legend.resize_panels(height=self.non_static_legend_height)
 
       self.legend.set_x_label('Frequency (Hz)')
       self.legend.set_y_label('Time (relative to file start)')
@@ -168,18 +178,25 @@ class Specgram(object):
 
     def toggle_scroll_mode(self, *args):
         self.is_scroll_active ^= True
+        self.cached_legend_elements['__scroll_mode_bar__']['is_valid'] = False
         self.scroll_line_index['top'] = 0
         self.scroll_line_index['bottom'] = self.window.rows
 
     def handle_mouse_event(self, *args):
-        if not self.is_scroll_active:
-            self.toggle_scroll_mode()
-
+        lines_to_scroll = 0
         _id, x, y, z, mouse_state = args
         if mouse_state == 134217728:
-            self.scroll(20)
+            lines_to_scroll = 15
+            self.log('Scroll UP')
         elif mouse_state == 524288:
-            self.scroll(-20)
+            lines_to_scroll = -15
+            self.log('Scroll DOWN')
+
+        if not self.is_scroll_active and lines_to_scroll != 0:
+            self.toggle_scroll_mode()
+
+        self.scroll(lines_to_scroll)
+        self.log('scroll_line_index: top: {} bottom: {}'.format(self.scroll_line_index['top'], self.scroll_line_index['bottom']))
 
     def scroll(self, lines):
         if lines > 0:
@@ -313,6 +330,8 @@ class Specgram(object):
                     'Horizontal Axis': self.legend.x_label,
                     '__channel_bar__':
                         self.create_channel_bar(),
+                    '__scroll_mode_bar__':
+                        self.create_scroll_mode_bar(),
                     '__nav_mode_bar__': 
                         self.create_nav_mode_bar(),
                     '__plot_mode_bar__':
@@ -340,6 +359,7 @@ class Specgram(object):
                     'F / f': 'Toggle full screen on / off',
                     'G / g': 'Toggle grayscale / full color',
                     'R / r': 'Reverse color map',
+                    'S / s': 'Toggle scroll to scroll through file',
                 },
             },
             '__minimal__': {
@@ -350,8 +370,12 @@ class Specgram(object):
                     'Sample Rate (Hz)': self.sample_rate,
                     'Max Freq': self.argmax_freq,
                     'NFFT': self.nfft,
+                    '__dataset_position_marker__':
+                        self.create_dataset_position_bar(),
                     '__channel_bar__':
                         self.create_channel_bar(),
+                    '__scroll_mode_bar__':
+                        self.create_scroll_mode_bar(),
                     '__nav_mode_bar__': 
                         self.create_nav_mode_bar(),
                     '__intensity_bar__': 
@@ -578,6 +602,34 @@ class Specgram(object):
         self.cached_legend_elements['__channel_bar__']['is_valid'] = True
         return(channel_bar)
 
+    def create_scroll_mode_bar(self):
+        if '__scroll_mode_bar__' in self.cached_legend_elements:
+            if self.cached_legend_elements['__scroll_mode_bar__']['is_valid']:
+                return(self.cached_legend_elements['__scroll_mode_bar__']['element'])
+        else:
+            self.init_element_cache(element='__scroll_mode_bar__')
+
+        if self.mini_legend_mode:
+            legend = self.mini_legend
+        else:
+            legend = self.legend
+
+        mode_bar = []
+        if self.is_scroll_active:
+            color = self.accent_color[1]
+            scroll_mode_text = 'ON (full Spectrogram)'
+        else:
+            color = self.accent_color[0]
+            scroll_mode_text = 'OFF (shrunk-to-fit Spectrogram)'
+
+        mode_bar.extend([
+                CursesPixel(text='Scroll Mode: {}'.format(scroll_mode_text).center(legend.columns), 
+                    fg=-1, bg=color, attr=A_BOLD),
+            ])
+        self.cached_legend_elements['__scroll_mode_bar__']['element'] = mode_bar
+        self.cached_legend_elements['__scroll_mode_bar__']['is_valid'] = True
+        return(mode_bar)
+
     def create_plot_mode_bar(self):
         if '__plot_mode_bar__' in self.cached_legend_elements:
             if self.cached_legend_elements['__plot_mode_bar__']['is_valid']:
@@ -597,6 +649,7 @@ class Specgram(object):
             color = self.accent_color[0]
         else:
             color = self.accent_color[2]
+
         mode_bar.extend([
                 CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
@@ -721,10 +774,13 @@ class Specgram(object):
         formatted_data = self.format_data(self.get_plot_dimensions(), shrink_to_fit=not self.is_scroll_active)
         self.window.clear_buffer()
 
-        if self.is_scroll_active:
+        # self.log('Length formatted_data: {} --> result: {}'.format(len(formatted_data), (self.is_scroll_active and len(formatted_data) >= 10)))
+        if self.is_scroll_active and len(formatted_data) >= 20:
+            # self.log('Went with scroll logic block!')
             for row in formatted_data[self.scroll_line_index['top']: self.scroll_line_index['bottom']]:
                 self.window.buffer.append(row)
         else:
+            # self.log('Went with default logic block')
             for row in formatted_data:
                 self.window.buffer.append(row)
 
@@ -805,12 +861,20 @@ class Specgram(object):
     def format_data(self, term_size, shrink_to_fit=True):
         # make sure nfft will work for current term size
         self.handle_nfft()
-        is_data_file_empty = False
+        
+        # output data
+        formatted_data = [] # list of lists 2D
+        formatted_info_line = []  # 1D row of CursesPixels
+        formatted_border_line = []  # 1D row of CursesPixels
+
         # create matrix with color for dB intensity that fits in alloted rows
         try:
             axis, rows = self.create_specgram()
             self.current_axis = axis
             self.current_rows = rows
+            if len(rows) <= 0:
+                # TODO: handle this better...
+                raise ZeroDivisionError('Empty data file')
 
             if shrink_to_fit:
                 axis, rows = self.fit_data(axis, rows)
@@ -819,10 +883,19 @@ class Specgram(object):
             # TODO handle values too low error with popup error
             return([])
         except ZeroDivisionError:
+            # self.log('Found empty data file!')
             # Empty data file!
-            is_data_file_empty = True
-            error_text = 'THIS DATA FILE IS EMPTY!'.center(self.window.columns)
-            
+            error_text = [
+                'THIS DATA FILE IS EMPTY!'.center(self.window.columns),
+                'You are seeing this messages because the default behavior-'.center(self.window.columns),
+                '-is to show these gaps. To skip empty files, pass --skip-empty'.center(self.window.columns),
+                ]
+            formatted_data.append(self.window.hline(ch=' '))
+            formatted_data.append([CursesPixel(text=error_text[0], fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_BOLD | A_BLINK)])
+            for line in error_text[1:]:
+                formatted_data.append([CursesPixel(text=line, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_BOLD)])
+            return(formatted_data)
+
         freqlist = numpy.fft.fftfreq(self.nfft) * self.sample_rate
         maxfreq = freqlist[int(self.nfft / 2 - 1)]
         minfreq = freqlist[1]
@@ -832,11 +905,6 @@ class Specgram(object):
         y_axis = self.get_time_data(axis=axis)
         info_line = ''.join([str(val) for val in x_axis['info_row']])
         border_line = ''.join([str(val) for val in x_axis['border_row']])
-
-        # output data
-        formatted_data = [] # list of lists 2D
-        formatted_info_line = []  # 1D row of CursesPixels
-        formatted_border_line = []  # 1D row of CursesPixels
 
         formatted_info_line = self.format_x_axis_pixels(info_line, A_BOLD)
         formatted_border_line = self.format_x_axis_pixels(border_line, A_NORMAL)
@@ -853,10 +921,6 @@ class Specgram(object):
                 else:
                     formatted_row.append(CursesPixel(text='|', fg=COLOR_BLACK, bg=color, attr=A_BOLD))
             formatted_data.append(formatted_row)
-
-        if is_data_file_empty:
-            formatted_data.append([CursesPixel(text=' ', fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_NORMAL)])
-            formatted_data.append([CursesPixel(text=error_text, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_BOLD | A_BLINK)])
 
         # append x-axis data to output buffer in reverse order
         formatted_data.append(formatted_border_line)
@@ -885,12 +949,8 @@ class Specgram(object):
         return(results)
 
     def fit_data(self, axis, rows):
-        # try:
         return(self.downsample_to_max(axis, self.window.columns), 
                self.downsample_to_max(rows, self.window.columns))
-        # except ZeroDivisionError:
-        #     # TODO Show error to user that voltages are too low to make specgram
-        #     return(axis, rows)
 
     def create_specgram(self):
         done = False

@@ -262,7 +262,7 @@ class Ui(object):
             for opt in mini_options:
                 if side == opt:
                     panels.append(self.new_corner_window(corner=side, 
-                                                         rows=19, 
+                                                         rows=25, 
                                                          columns=50, 
                                                          name='{}_section_{}'.format(name, i)))
             for opt in full_options:

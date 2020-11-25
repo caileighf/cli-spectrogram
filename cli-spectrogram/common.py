@@ -230,9 +230,10 @@ class FileNavManager(object):
 
     Handles list of files and holds "position" of cursor in list of files
     """
-    def __init__(self, data_dir, file_name_pattern='1*.txt'):
+    def __init__(self, data_dir, file_name_pattern='1*.txt', skip_empty=False):
         super(FileNavManager, self).__init__()
         self.data_dir = data_dir
+        self.skip_empty = skip_empty
         self.shutdown = False
         self._state = 'Streaming'
         self.file_pattern = file_name_pattern
@@ -259,7 +260,9 @@ class FileNavManager(object):
     def current_position(self):
         return(self.cursor_pos)
     
-    
+    def is_empty(self, file):
+        return(file.stat().st_size <= 0)
+
     def validate_cursor(self):
         if self.cursor_pos >= len(self._files):
             self.move_to_end()
@@ -309,7 +312,15 @@ class FileNavManager(object):
         sys.exit()
 
     def _update_files(self):
-        self._files = sorted(pathlib.Path(self.data_dir).glob(self.file_pattern))[:-1]
+        temp_files = sorted(pathlib.Path(self.data_dir).glob(self.file_pattern))[:-1]
+        if self.skip_empty:
+            self._files = []
+            for f in temp_files:
+                if not self.is_empty(file=f):
+                    self._files.append(f)
+        else:
+            self._files = temp_files
+
         return(len(self._files))
 
 class Cursor(object):

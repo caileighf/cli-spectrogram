@@ -56,6 +56,7 @@ def main(stdscr):
     parser.add_argument('--device-name', help='', default=None, type=str)
     parser.add_argument('--file-length', help='in seconds', required=False, type=float)
     parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
+    parser.add_argument('--skip-empty', action='store_true', help='Skip empty data files -- do not show gaps', required=False)
     parser.add_argument('-r', '--right-hand-legend', action='store_true', 
                         help='Orient the legend to stick to the right side (default: left)', required=False)
     parser.add_argument('--stacked-mode', action='store_true', help='Start in stacked-mode', required=False)
@@ -91,7 +92,8 @@ def main(stdscr):
                         threshold_steps=args.threshold_steps, 
                         nfft=args.nfft,
                         sample_rate=args.sample_rate,
-                        file_length=args.file_length)
+                        file_length=args.file_length,
+                        skip_empty=args.skip_empty)
     if not args.stacked_mode:
         ui.best_fit_mode()
 
