@@ -50,12 +50,40 @@ def handle_config(args):
 
     return(args)
 
-def main(stdscr):
+def main(stdscr, args):
+    if args.use_config:
+        args = handle_config(args)
+
+    ui = Ui(stdscr=stdscr, refresh_hz=args.file_length)
+    specgram = Specgram(source=args.source,
+                        register_keystroke_callable=ui.register_keystroke_callable,
+                        ui=ui,
+                        display_channel=args.display_channel,
+                        device_name=args.device_name,
+                        legend_side=LEFT if not args.right_hand_legend else RIGHT,
+                        threshold_db=args.threshold_db, 
+                        markfreq_hz=args.markfreq_hz, 
+                        threshold_steps=args.threshold_steps, 
+                        nfft=args.nfft,
+                        sample_rate=args.sample_rate,
+                        file_length=args.file_length,
+                        skip_empty=args.skip_empty)
+    if not args.stacked_mode:
+        ui.best_fit_mode()
+
+    try:
+        run_cli(ui=ui,
+                specgram=specgram)
+    finally:
+        specgram.close()
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='cli-spectrogram')
     parser.add_argument('--sample-rate', help='', required=False, type=float)
     parser.add_argument('--device-name', help='', default=None, type=str)
     parser.add_argument('--file-length', help='in seconds', required=False, type=float)
     parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
+    parser.add_argument('--skip-empty', action='store_true', help='Skip empty data files -- do not show gaps', required=False)
     parser.add_argument('-r', '--right-hand-legend', action='store_true', 
                         help='Orient the legend to stick to the right side (default: left)', required=False)
     parser.add_argument('--stacked-mode', action='store_true', help='Start in stacked-mode', required=False)
@@ -76,34 +104,8 @@ def main(stdscr):
                         file_length=1.0)
     args = parser.parse_args()
 
-    if args.use_config:
-        args = handle_config(args)
-
-    ui = Ui(stdscr=stdscr, refresh_hz=args.file_length)
-    specgram = Specgram(source=args.source,
-                        register_keystroke_callable=ui.register_keystroke_callable,
-                        ui=ui,
-                        display_channel=args.display_channel,
-                        device_name=args.device_name,
-                        legend_side=LEFT if not args.right_hand_legend else RIGHT,
-                        threshold_db=args.threshold_db, 
-                        markfreq_hz=args.markfreq_hz, 
-                        threshold_steps=args.threshold_steps, 
-                        nfft=args.nfft,
-                        sample_rate=args.sample_rate,
-                        file_length=args.file_length)
-    if not args.stacked_mode:
-        ui.best_fit_mode()
-
     try:
-        run_cli(ui=ui,
-                specgram=specgram)
-    finally:
-        specgram.close()
-
-if __name__ == '__main__':
-    try:
-        curses.wrapper(main)
+        curses.wrapper(main, args)
     except KeyboardInterrupt:
         pass
     finally:

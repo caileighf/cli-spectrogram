@@ -27,6 +27,7 @@ from common import (
         get_term_size, 
         get_fitted_window,
         init_color_pairs,
+        init_mouse,
         ESC,
         Q_MARK
     )
@@ -54,6 +55,7 @@ class Ui(object):
     def __init__(self, stdscr, refresh_hz=0):
         super(Ui, self).__init__()
         init_color_pairs()
+        init_mouse()
         self.running_async = False
         self.key_buffer = deque()
         self.base_window = stdscr
@@ -73,6 +75,11 @@ class Ui(object):
         # set base window to nodelay so getch will be non-blocking
         self.base_window.nodelay(True)
         curses.curs_set(False)
+        # create flash message window
+        self.new_center_window(rows=10, columns=50, name='flash_message')
+        self.panels['flash_message'].border()
+        self.panels['flash_message'].set_basic_buffer()
+        self.panels['flash_message'].hide()
 
     @property
     def main_window(self):
@@ -260,7 +267,7 @@ class Ui(object):
             for opt in mini_options:
                 if side == opt:
                     panels.append(self.new_corner_window(corner=side, 
-                                                         rows=19, 
+                                                         rows=25, 
                                                          columns=50, 
                                                          name='{}_section_{}'.format(name, i)))
             for opt in full_options:
@@ -288,6 +295,23 @@ class Ui(object):
 
         self.legend_managers[name] = LegendManager(panels, get_legend_dict, type_)
         return(self.legend_managers[name])
+
+    def flash_message(self, output, duration_sec=1.0, flash_screen=True):
+        if flash_screen:
+            curses.flash()
+
+        self.panels['flash_message'].show()
+        self.panels['flash_message'].set_focus()
+
+        if not isinstance(output, list): output = [output]
+        for i, line in enumerate(output):
+            self.panels['flash_message'].print_line(line, 2, i+1, end='', center=True)
+
+        curses.panel.update_panels()
+        curses.doupdate()
+        time.sleep(duration_sec)
+        
+        self.panels['flash_message'].hide()
 
     def new_center_window(self, rows, columns, name, 
                                 output=None, set_focus=True, 
@@ -408,10 +432,10 @@ class Ui(object):
         if not self.running_async:
             self._handle_keystokes(remaining_time=abs(self.refresh_rate - (stop - start)))
 
-        self.log_keystroke(KeystrokeCallable(key_id=-1,
-                                             key_name='spin() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
-                                             call=[],
-                                             case_sensitive=True))
+        # self.log_keystroke(KeystrokeCallable(key_id=-1,
+        #                                      key_name='spin() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
+        #                                      call=[],
+        #                                      case_sensitive=True))
 
     def log(self, output, end='\n'):
         with open('debug.log', 'a+') as f:
@@ -455,24 +479,20 @@ class Ui(object):
             if key != -1:
                 if key in self.keymap:
                     start_key_timer = time.time()
-                    [func(self.keymap[key]) for func in self.keymap[key].call]
+                    if key == curses.KEY_MOUSE:
+                        args = curses.getmouse()
+                        [func(*args) for func in self.keymap[key].call]
+                    else:
+                        [func(self.keymap[key]) for func in self.keymap[key].call]
                     stop_key_timer = time.time()
-                    self.log_keystroke(KeystrokeCallable(key_id=self.keymap[key].key_id,
-                                                         key_name='Timer for: {} --> {} seconds'.format(self.keymap[key].key_name,
-                                                                                                        '%.3f' % (stop_key_timer - start_key_timer)),
-                                                         call=[],
-                                                         case_sensitive=True))
 
-                if key not in self.keymap:
+                else:
+                    # curses.flash()
                     self.log_keystroke(KeystrokeCallable(key_id=-1,
-                                                         key_name='ERROR Unregistered key: {}'.format(key),
+                                                         key_name='ERROR Unregistered key: {}'.format(curses.keyname(key)),
                                                          call=[],
                                                          case_sensitive=True))
         stop = time.time()
-        self.log_keystroke(KeystrokeCallable(key_id=-1,
-                                             key_name='_handle_keystokes() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
-                                             call=[],
-                                             case_sensitive=True))
 
     def _kill(self, *arg):
         raise KeyboardInterrupt
@@ -483,6 +503,7 @@ def test(stdscr):
     ui = Ui(stdscr=stdscr, refresh_hz=0.1)
     i = 0
     step = 1
+    ui.flash_message(output=['Flash!'])
     while True:
         start = time.time()
         rows, columns = get_term_size()
@@ -493,6 +514,13 @@ def test(stdscr):
                 pan.hide()
                 ui.spin()
         if i != 0 and i % 15 == 0:
+            ui.flash_message(output=[
+                    'Flash!',
+                    'Flash!',
+                    'Flash!',
+                    'Flash!',
+                    'Flash!',
+                ])
             i = random.randint(0, 30)
             if i % 2 == 0:
                 step = 1

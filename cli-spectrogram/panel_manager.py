@@ -23,7 +23,7 @@ BUMPER_CAR_MODE = True
 
 class LegendManager(object):
     """docstring for LegendManager"""
-    def __init__(self, panels, get_legend_dict, type_=SINGLE_V):
+    def __init__(self, panels, get_legend_dict, type_=SINGLE_V, default_key=None):
         super(LegendManager, self).__init__()
         self.type_ = type_
         self.panels = panels if isinstance(panels, list) else [panels]
@@ -36,12 +36,20 @@ class LegendManager(object):
         self.done_first_render = False
         self.footer = None
         self.do_update = True
+        self.default_key = default_key
 
     @property
     def legend_data(self):
         if self.minimal_mode:
             return(self.get_legend_dict()['__minimal__'])
-        return(self.get_legend_dict())
+
+        if self.default_key != None:
+            try:
+                return(self.get_legend_dict()[self.default_key])
+            except KeyError:
+                return(self.get_legend_dict())
+        else:
+            return(self.get_legend_dict())
 
     def toggle_minimal_mode(self):
         self.minimal_mode ^= True
@@ -231,8 +239,9 @@ class LegendManager(object):
                 if k[:2] != '__': p.buffer.append(p.hline(ch=' '))
 
         if self.footer != None:
+            self.panels[0].buffer.append(self.panels[0].hline(ch=' '))
             self.panels[0].buffer.append(self.panels[0].hline(ch='='))
-            self.panels[0].buffer.append([CursesPixel(text=' * {} *'.format(self.footer), fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD),])
+            self.panels[0].buffer.append([CursesPixel(text='{}'.format(self.footer.center(self.panels[0].columns)), fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD),])
 
 
 class PanelManager(object):
@@ -453,10 +462,13 @@ class PanelManager(object):
         if post_clean and not self.basic_buffer:
             self.clean_window()
 
-    def print_line(self, line, x, y, end='\n'):
+    def print_line(self, line, x, y, end='\n', center=False):
         _, columns = get_term_size()
         try:
-            self.window.addnstr(y, x, '{}{}'.format(line, end), columns-5)
+            if center:
+                self.window.addnstr(y, x, '{}{}'.format(line.center(self.columns-4), end), columns-5)
+            else:
+                self.window.addnstr(y, x, '{}{}'.format(line, end), columns-5)
         except curses.error:
             pass
 
