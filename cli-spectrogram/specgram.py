@@ -764,16 +764,22 @@ class Specgram(object):
 
     def full_screen(self, args):
         self.full_screen_mode ^= True # toggle
+
+        # Toggle correct legend for mode
+        if self.mini_legend_mode:
+            self.mini_legend.hide_all()\
+             if self.full_screen_mode\
+              else self.mini_legend.show_all()
+        else:
+            self.legend.hide_all()\
+             if self.full_screen_mode\
+              else self.legend.show_all()
+
+        # Expand plot if in best fit mode
         if self.full_screen_mode:
-            self.legend.hide_all()
             if self.ui.get_panel_mode() == 'Best Fit':
                 self.ui.toggle_overlap_mode()
-        else:
-            self.legend.show_all()
-            if self.mini_legend_mode:
-                self.toggle_minimal_mode()
-            # if self.ui.get_panel_mode() == 'Stacked':
-            #     self.ui.toggle_overlap_mode()
+
         self.window.refresh()
 
     def toggle_legend(self, args):
@@ -790,13 +796,10 @@ class Specgram(object):
         formatted_data = self.format_data(self.get_plot_dimensions(), shrink_to_fit=not self.is_scroll_active)
         self.window.clear_buffer()
 
-        # self.log('Length formatted_data: {} --> result: {}'.format(len(formatted_data), (self.is_scroll_active and len(formatted_data) >= 10)))
         if self.is_scroll_active and len(formatted_data) >= 20:
-            # self.log('Went with scroll logic block!')
             for row in formatted_data[self.scroll_line_index['top']: self.scroll_line_index['bottom']]:
                 self.window.buffer.append(row)
         else:
-            # self.log('Went with default logic block')
             for row in formatted_data:
                 self.window.buffer.append(row)
 
