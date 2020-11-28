@@ -127,3 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# saved specgram plots created at runtime 
+.__*_plot__

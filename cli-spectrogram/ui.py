@@ -156,10 +156,6 @@ class Ui(object):
     def revert_to_original_mode(self, *args):
         if self._original_panel_mode != self.get_panel_mode():
             self.toggle_overlap_mode()
-        # all_legends_hidden = [manager.is_hidden() for name, manager in self.legend_managers.items()]
-        # if False not in all_legends_hidden:
-        #     if self._original_panel_mode != self.get_panel_mode():
-        #         self.toggle_overlap_mode()
             
     def stacked_mode(self):
         self._original_panel_mode = 'Stacked'
@@ -416,33 +412,23 @@ class Ui(object):
             self.spin()
 
     def spin(self):
-        # handle message bar
-        # if not self.message_bar.is_focus():
-        #     self.message_bar.set_focus()
-
         start = time.time()
         for panel_id, panel in self.panels.items():
             if panel_id != 'main':
                 panel.redraw_warning()
 
-        # self.message_bar.print(' Hit the space bar or ? to toggle the help window | Ctrl + c or Delete to quit ', post_clean=False)
         curses.panel.update_panels()
         curses.doupdate()
         stop = time.time()
         if not self.running_async:
             self._handle_keystokes(remaining_time=abs(self.refresh_rate - (stop - start)))
 
-        # self.log_keystroke(KeystrokeCallable(key_id=-1,
-        #                                      key_name='spin() Timer: --> {} seconds'.format('%.3f' % (stop - start)),
-        #                                      call=[],
-        #                                      case_sensitive=True))
-
     def log(self, output, end='\n'):
         with open('debug.log', 'a+') as f:
             f.write('[{}]: {}{}'.format(int(time.time()), output, end))
 
     def log_keystroke(self, key):
-        with open('keystokes.log', 'a+') as f:
+        with open('keystrokes.log', 'a+') as f:
             f.write('[{}]: {}\n'.format(int(time.time()), key.key_name))
 
     @classmethod
@@ -487,7 +473,6 @@ class Ui(object):
                     stop_key_timer = time.time()
 
                 else:
-                    # curses.flash()
                     self.log_keystroke(KeystrokeCallable(key_id=-1,
                                                          key_name='ERROR Unregistered key: {}'.format(curses.keyname(key)),
                                                          call=[],
