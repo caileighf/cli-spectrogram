@@ -1,4 +1,5 @@
 from __future__ import print_function
+from cached_ui_elements import cache_element
 from common import Cursor
 from common import (WindowDimensions, CursesPixel, Cursor, get_term_size)
 from common import (
@@ -37,6 +38,7 @@ class LegendManager(object):
         self.footer = None
         self.do_update = True
         self.default_key = default_key
+        self.elem_cache = {}
 
     @property
     def legend_data(self):
@@ -209,8 +211,7 @@ class LegendManager(object):
         self.update_legend_data() # possibly add this as on_state_change callback
                                   # instead of explicitly calling here
         for i, p in enumerate(self.panels):
-            if p.is_drawn:# or (i == self.static_index and self.done_first_render):
-                # if i == self.static_index: self.done_first_render = True
+            if p.is_drawn:
                 continue
 
             p.clear_buffer()
@@ -225,7 +226,7 @@ class LegendManager(object):
                 p.buffer.append([
                         CursesPixel(text=' {}'.format(outer_k).center(p.columns - 1), fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD),
                     ])
-                p.buffer.append(p.hline())
+                p.buffer.append(p.hline(ch='-'))
                 for k, v in outer_v.items():
                     # if key starts with __ that means it's already a list of curses pixels so append as is
                     if k[:2] == '__':
@@ -270,6 +271,7 @@ class PanelManager(object):
         self._term_too_small = False
         self._is_drawn = False # flag for managers of multiple panels
         self.basic_buffer = False
+        self.elem_cache = {}
         self._init_window(window_dimensions)
 
     def _init_window(self, window_dimensions):
@@ -395,8 +397,6 @@ class PanelManager(object):
 
     def refresh(self):
         pass
-        # curses.panel.update_panels()
-        # self.window.refresh()
     
     def clear_buffer(self):
         self.buffer.clear()
@@ -419,7 +419,7 @@ class PanelManager(object):
             f.write('[{}]: {}{}'.format(int(time.time()), output, end))
 
     def redraw_warning(self):
-        self.window.move(0, 0)
+        self.window.move(0, 0) # move cursor to position (0,0)
         self._is_drawn = False
         for call in self.callback:
             call(self.term_size)
@@ -475,7 +475,8 @@ class PanelManager(object):
     def set_focus(self):
         self.panel.top()
 
-    def hline(self, ch='-'):
+    @cache_element(cache='elem_cache', target_kwarg='ch')
+    def hline(self, ch):
         _hline = []
         _hline.extend([
                 CursesPixel(text=ch * self.columns, fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD)
@@ -508,7 +509,8 @@ class PanelManager(object):
 
             self.log('''
                 User tried to resize window too fast!
-                x or y value would put the window off screen!\n{}'''.format(traceback.format_exc()))
+                x or y value would put the window off screen!\n{}
+                '''.format(traceback.format_exc()))
             return(False)
         
         self.redraw_buffer()

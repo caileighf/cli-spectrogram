@@ -13,6 +13,7 @@
 # File: specgram.py
 #
 from __future__ import print_function
+from cached_ui_elements import (handle_ui_element_cache, invalidate_ui_element_cache, invalidate_cache)
 from common import (KeystrokeCallable, WindowDimensions, FileNavManager, CursesPixel)
 from common import (default_emphasis, ESC, Q_MARK, SHIFT_UP, SHIFT_DOWN, SHIFT_LEFT, SHIFT_RIGHT)
 from common import (
@@ -111,9 +112,6 @@ class Specgram(object):
         self.file_length_sec = file_length
         self.argmax_freq = 0
 
-        self.full_screen_mode = False
-        self._init_color(use_full_color)
-
         self.skip_empty = skip_empty
         self.file_manager = FileNavManager(data_dir=self.source, skip_empty=skip_empty)
         self.current_file = self.file_manager.next_file()
@@ -125,62 +123,43 @@ class Specgram(object):
         self.scroll_up_step = -15
         self.scroll_dn_step = 15
         self.scroll_line_index = {'top': 0, 'bottom': 0}
-        self._init_keymap()
-
-        self._init_legend(legend_side)
         self.mini_legend_mode = False
         self.cached_legend_elements = {}
-        for section, val in self.legend_data().items():
-            for _, pairs in val.items():
-                [self.init_element_cache(element=elem_name) for elem_name in pairs.keys() if elem_name[:2] == '__']
 
-        self.handle_plot_state_change(event='INITIAL_RESIZE')
+        self.full_screen_mode = False
+        self._init_color(use_full_color)
+
+        self._init_keymap()
+        self._init_legend(legend_side)
         self._init_ui_help()
+        self.handle_plot_state_change(event='INITIAL_RESIZE')
 
     def _init_legend(self, legend_side):
-      rows, _ = self.window.term_size
-      # self.legend = self.ui.new_legend(name='specgram_legend', 
-      #                                  num_panels=2, 
-      #                                  get_legend_dict=self.legend_data, 
-      #                                  type_=SPLIT_V_STACK, 
-      #                                  shared_dimension=50, 
-      #                                  side=legend_side)
-      self.legend = self.ui.new_legend(name='specgram_legend', 
-                                       num_panels=1, 
-                                       get_legend_dict=self.legend_data, 
-                                       type_=SINGLE_V, 
-                                       shared_dimension=50, 
-                                       side=legend_side)
-      self.legend.default_key = 'UPPER'
-      self.legend.footer = 'Show ALL keyboard shortcuts with ? or space'
-
-      # self.non_static_legend_height = 30
-      # self.legend.set_static_index('LOWER')
-      # # check if top legend can fit -- if not resize
-      # if rows < self.non_static_legend_height * 2:
-      #   self.legend.resize_panels(height=self.non_static_legend_height)
-
-      self.legend.set_x_label('Frequency (Hz)')
-      self.legend.set_y_label('Time (relative to file start)')
+        rows, _ = self.window.term_size
+        self.legend = self.ui.new_legend(name='specgram_legend', 
+                                         num_panels=1, 
+                                         get_legend_dict=self.legend_data, 
+                                         type_=SINGLE_V, 
+                                         shared_dimension=50, 
+                                         side=legend_side)
+        self.legend.default_key = 'UPPER'
+        self.legend.footer = 'Show ALL keyboard shortcuts with ? or space'
+        self.legend.set_x_label('Frequency (Hz)')
+        self.legend.set_y_label('Time (relative to file start)')
 
     def _init_color(self, use_full_color):
         self.use_full_color = use_full_color
-        if self.use_full_color:
-            self.color = full_color
-            self.standout_color = full_color_standout
-            self.accent_color = full_color_accent
-        else:
-            self.color = grayscale_color
-            self.standout_color = grayscale_color_standout
-            self.accent_color = grayscale_color_accent
+        self.color = full_color if self.use_full_color else grayscale_color
+        self.standout_color = full_color_standout if self.use_full_color else grayscale_color_standout
+        self.accent_color = full_color_accent if self.use_full_color else grayscale_color_accent
 
+    @invalidate_cache(cache='cached_legend_elements')
     def toggle_grayscale(self, *args):
         self._init_color(use_full_color=not self.use_full_color)
-        self.invalidate_cache()
 
+    @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__scroll_mode_bar__')
     def toggle_scroll_mode(self, *args):
         self.is_scroll_active ^= True
-        self.cached_legend_elements['__scroll_mode_bar__']['is_valid'] = False
         self.scroll_line_index['top'] = 0
         self.scroll_line_index['bottom'] = self.window.rows
 
@@ -221,10 +200,9 @@ class Specgram(object):
                 self.scroll_line_index['top'] += lines
                 self.scroll_line_index['bottom'] += lines
 
-
+    @invalidate_cache(cache='cached_legend_elements')
     def reverse_color_map(self, *args):
         self.color.reverse()
-        self.invalidate_cache()
 
     def _init_keymap(self):
         self.keymap = [
@@ -272,33 +250,30 @@ class Specgram(object):
                               key_name='S',
                               call=[self.toggle_scroll_mode],
                               case_sensitive=False),
-            KeystrokeCallable(key_id=Q_MARK,
-                              key_name='?',
-                              call=[self.handle_config]),
             KeystrokeCallable(key_id=KEY_UP,
                               key_name='Up',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=KEY_DOWN,
                               key_name='Down',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=KEY_LEFT,
                               key_name='Left',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=KEY_RIGHT,
                               key_name='Right',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=SHIFT_LEFT,
                               key_name='Shift + Left',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=SHIFT_RIGHT,
                               key_name='Shift + Right',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=SHIFT_UP,
                               key_name='Shift + Up',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=SHIFT_DOWN,
                               key_name='Shift + Down',
-                              call=[self.handle_navigation]),
+                              call=[self.handle_plot_change]),
             KeystrokeCallable(key_id=KEY_PPAGE,
                               key_name='Previous Page',
                               call=[self.handle_navigation]),
@@ -364,20 +339,22 @@ class Specgram(object):
                     'B / b': 'Jump to beginning of dataset',
                     'E / e': 'Jump to end of dataset',
                     'Escape': 'Resume streaming',
-                    '__hline02__': self.legend.hline(ch=' '),
+                    '__hline01__': self.legend.hline(ch=' '),
                     'Shift + Left': 'Move legend left',
                     'Shift + Right': 'Move legend right',
                     'H / h': 'Toggle keyboard shortcuts on / off',
                     'F / f': 'Toggle full screen on / off',
                     'G / g': 'Toggle grayscale / full color',
                     'R / r': 'Reverse color map',
+                    '__hline02__': self.legend.hline(ch=' '),
                     'S / s': 'Toggle scroll to scroll through file',
+                    'Scroll Up / Down': 'Explore full data file',
+                    'Scroll wheel button': 'Reverse scroll direction',
                 },
             },
             '__minimal__': {
                 'Spectrogram Information': {
                     'Time': str(self.get_formatted_dt()),
-                    '__date_time_bar__': self.create_dt_bar(),
                     'Threshold (dB)': self.threshold_db,
                     'Sample Rate (Hz)': self.sample_rate,
                     'Max Freq': self.argmax_freq,
@@ -405,9 +382,7 @@ class Specgram(object):
     def get_formatted_kb_shortcuts(self):
         return(self.legend_data()['LOWER']['Keyboard Shortcuts'])
 
-    def handle_config(self, key):
-        pass
-
+    @invalidate_cache(cache='cached_legend_elements')
     def handle_minimal_mode(self, *args):
         if hasattr(self, 'mini_legend'):
             if self.mini_legend_mode:
@@ -427,7 +402,6 @@ class Specgram(object):
             self.mini_legend.minimal_mode = True
             self.ui.add_legend_manager(name='specgram_mini_legend', manager=self.mini_legend)
 
-        self.invalidate_cache()
         if self.ui.get_panel_mode() == 'Best Fit':
             self.ui.toggle_overlap_mode()
 
@@ -437,22 +411,42 @@ class Specgram(object):
         if self.mini_legend_mode:
             self.ui.flash_message(output=['Minimal Legend Mode Active'], duration_sec=1.0)
 
+    @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__dataset_position_marker__')
+    @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__nav_mode_bar__')
     def handle_position_cache(self):
-        self.cached_legend_elements['__dataset_position_marker__']['is_valid'] = False
-        self.cached_legend_elements['__date_time_bar__']['is_valid'] = False
-        self.cached_legend_elements['__nav_mode_bar__']['is_valid'] = False
+        pass
 
+    @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__intensity_bar__')
     def handle_plot_attrs_cache(self):
-        self.cached_legend_elements['__intensity_bar__']['is_valid'] = False
+        pass
 
-    def invalidate_cache(self):
-        self.cached_legend_elements['__dataset_position_marker__']['is_valid'] = False
-        self.cached_legend_elements['__date_time_bar__']['is_valid'] = False
-        self.cached_legend_elements['__nav_mode_bar__']['is_valid'] = False
-        self.cached_legend_elements['__intensity_bar__']['is_valid'] = False
-        self.cached_legend_elements['__channel_bar__']['is_valid'] = False
-        self.cached_legend_elements['__plot_mode_bar__']['is_valid'] = False
-        self.cached_legend_elements['__scroll_mode_bar__']['is_valid'] = False
+    def handle_plot_change(self, key):
+        start = time.time()
+        if key.key_id == KEY_LEFT or key.key_id == KEY_RIGHT:
+            if key.key_id == KEY_RIGHT:
+                self.markfreq_hz += 100
+            else:
+                self.markfreq_hz -= 100
+            self.markfreq_hz = self.markfreq_hz if self.markfreq_hz >= 1 else 1
+            self.markfreq_hz = self.markfreq_hz if self.markfreq_hz <= 10000 else 10000
+        elif key.key_id == KEY_UP or key.key_id == KEY_DOWN:
+            self.handle_plot_attrs_cache()
+            if key.key_id == KEY_UP:
+                self.threshold_db += self.threshold_steps
+            else:
+                self.threshold_db -= self.threshold_steps
+            self.threshold_db = self.threshold_db if self.threshold_db >= 1 else 1
+            self.threshold_db = self.threshold_db if self.threshold_db <= 150 else 150
+        elif key.key_id == SHIFT_UP or key.key_id == SHIFT_DOWN:
+            self.handle_plot_attrs_cache()
+            if key.key_id == SHIFT_UP:
+                self.nfft += self.nfft_step
+            else:
+                self.nfft -= self.nfft_step
+        elif key.key_id == SHIFT_LEFT or key.key_id == SHIFT_RIGHT:
+            self.handle_move_legend(key)
+        stop = time.time()
+        self.log('specgram::handle_plot_change() Timer: %.3f seconds' % (stop - start))
 
     def handle_navigation(self, key):
         start = time.time()
@@ -488,30 +482,29 @@ class Specgram(object):
                 cursor_pos = self.file_manager.move_to_end()
                 if self.mini_legend_mode:
                     self.toggle_minimal_mode()
-                # self.ui.revert_to_original_mode()
-            elif key.key_id == KEY_LEFT or key.key_id == KEY_RIGHT:
-                if key.key_id == KEY_RIGHT:
-                    self.markfreq_hz += 100
-                else:
-                    self.markfreq_hz -= 100
-                self.markfreq_hz = self.markfreq_hz if self.markfreq_hz >= 1 else 1
-                self.markfreq_hz = self.markfreq_hz if self.markfreq_hz <= 10000 else 10000
-            elif key.key_id == KEY_UP or key.key_id == KEY_DOWN:
-                self.handle_plot_attrs_cache()
-                if key.key_id == KEY_UP:
-                    self.threshold_db += self.threshold_steps
-                else:
-                    self.threshold_db -= self.threshold_steps
-                self.threshold_db = self.threshold_db if self.threshold_db >= 1 else 1
-                self.threshold_db = self.threshold_db if self.threshold_db <= 150 else 150
-            elif key.key_id == SHIFT_UP or key.key_id == SHIFT_DOWN:
-                self.handle_plot_attrs_cache()
-                if key.key_id == SHIFT_UP:
-                    self.nfft += self.nfft_step
-                else:
-                    self.nfft -= self.nfft_step
-            elif key.key_id == SHIFT_LEFT or key.key_id == SHIFT_RIGHT:
-                self.handle_move_legend(key)
+            # elif key.key_id == KEY_LEFT or key.key_id == KEY_RIGHT:
+            #     if key.key_id == KEY_RIGHT:
+            #         self.markfreq_hz += 100
+            #     else:
+            #         self.markfreq_hz -= 100
+            #     self.markfreq_hz = self.markfreq_hz if self.markfreq_hz >= 1 else 1
+            #     self.markfreq_hz = self.markfreq_hz if self.markfreq_hz <= 10000 else 10000
+            # elif key.key_id == KEY_UP or key.key_id == KEY_DOWN:
+            #     self.handle_plot_attrs_cache()
+            #     if key.key_id == KEY_UP:
+            #         self.threshold_db += self.threshold_steps
+            #     else:
+            #         self.threshold_db -= self.threshold_steps
+            #     self.threshold_db = self.threshold_db if self.threshold_db >= 1 else 1
+            #     self.threshold_db = self.threshold_db if self.threshold_db <= 150 else 150
+            # elif key.key_id == SHIFT_UP or key.key_id == SHIFT_DOWN:
+            #     self.handle_plot_attrs_cache()
+            #     if key.key_id == SHIFT_UP:
+            #         self.nfft += self.nfft_step
+            #     else:
+            #         self.nfft -= self.nfft_step
+            # elif key.key_id == SHIFT_LEFT or key.key_id == SHIFT_RIGHT:
+            #     self.handle_move_legend(key)
         stop = time.time()
         self.log('specgram::handle_navigation() Timer: %.3f seconds' % (stop - start))
 
@@ -521,34 +514,8 @@ class Specgram(object):
         else:
             self.legend.move_right()
 
-    def init_element_cache(self, element):
-        self.cached_legend_elements[element] = {
-            'is_valid': False,
-            'element': None,
-        }
-
-    def create_dt_bar(self):
-        if '__date_time_bar__' in self.cached_legend_elements:
-            if self.cached_legend_elements['__date_time_bar__']['is_valid']:
-                return(self.cached_legend_elements['__date_time_bar__']['element'])
-        else:
-            self.init_element_cache(element='__date_time_bar__')
-
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
-        dt = self.get_formatted_dt()
-        dt_bar = []
-
+    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__dataset_position_marker__')  
     def create_dataset_position_bar(self):
-        if '__dataset_position_marker__' in self.cached_legend_elements:
-            if self.cached_legend_elements['__dataset_position_marker__']['is_valid']:
-                return(self.cached_legend_elements['__dataset_position_marker__']['element'])
-        else:
-            self.init_element_cache(element='__dataset_position_marker__')
-
         if self.mini_legend_mode:
             legend = self.mini_legend
         else:
@@ -577,17 +544,10 @@ class Specgram(object):
         dataset_pos_bar.extend(top_bar)
         dataset_pos_bar.extend([CursesPixel(text='\n', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)])
         dataset_pos_bar.extend(bottom_bar)
-        self.cached_legend_elements['__dataset_position_marker__']['element'] = dataset_pos_bar
-        self.cached_legend_elements['__dataset_position_marker__']['is_valid'] = True
         return(dataset_pos_bar)
 
+    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')  
     def create_channel_bar(self):
-        if '__channel_bar__' in self.cached_legend_elements:
-            if self.cached_legend_elements['__channel_bar__']['is_valid']:
-                return(self.cached_legend_elements['__channel_bar__']['element'])
-        else:
-            self.init_element_cache(element='__channel_bar__')
-
         if self.mini_legend_mode:
             legend = self.mini_legend
         else:
@@ -614,17 +574,10 @@ class Specgram(object):
         channel_bar = []
         channel_bar.extend(top_bar)
         channel_bar.extend(bottom_bar)
-        self.cached_legend_elements['__channel_bar__']['element'] = channel_bar
-        self.cached_legend_elements['__channel_bar__']['is_valid'] = True
         return(channel_bar)
 
+    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__scroll_mode_bar__')
     def create_scroll_mode_bar(self):
-        if '__scroll_mode_bar__' in self.cached_legend_elements:
-            if self.cached_legend_elements['__scroll_mode_bar__']['is_valid']:
-                return(self.cached_legend_elements['__scroll_mode_bar__']['element'])
-        else:
-            self.init_element_cache(element='__scroll_mode_bar__')
-
         if self.mini_legend_mode:
             legend = self.mini_legend
         else:
@@ -642,17 +595,10 @@ class Specgram(object):
                 CursesPixel(text='Scroll Mode: {}'.format(scroll_mode_text).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
-        self.cached_legend_elements['__scroll_mode_bar__']['element'] = mode_bar
-        self.cached_legend_elements['__scroll_mode_bar__']['is_valid'] = True
         return(mode_bar)
 
+    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__plot_mode_bar__')
     def create_plot_mode_bar(self):
-        if '__plot_mode_bar__' in self.cached_legend_elements:
-            if self.cached_legend_elements['__plot_mode_bar__']['is_valid']:
-                return(self.cached_legend_elements['__plot_mode_bar__']['element'])
-        else:
-            self.init_element_cache(element='__plot_mode_bar__')
-
         if self.mini_legend_mode:
             legend = self.mini_legend
         else:
@@ -670,17 +616,10 @@ class Specgram(object):
                 CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
-        self.cached_legend_elements['__plot_mode_bar__']['element'] = mode_bar
-        self.cached_legend_elements['__plot_mode_bar__']['is_valid'] = True
         return(mode_bar)
 
+    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__nav_mode_bar__')
     def create_nav_mode_bar(self):
-        if '__nav_mode_bar__' in self.cached_legend_elements:
-            if self.cached_legend_elements['__nav_mode_bar__']['is_valid']:
-                return(self.cached_legend_elements['__nav_mode_bar__']['element'])
-        else:
-            self.init_element_cache(element='__nav_mode_bar__')
-
         if self.mini_legend_mode:
             legend = self.mini_legend
         else:
@@ -697,17 +636,10 @@ class Specgram(object):
                 CursesPixel(text='Nav Mode: {}'.format(self.file_manager.state).center(legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
-        self.cached_legend_elements['__nav_mode_bar__']['element'] = mode_bar
-        self.cached_legend_elements['__nav_mode_bar__']['is_valid'] = True
         return(mode_bar)
 
+    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__intensity_bar__')
     def create_intensity_bar(self):
-        if '__intensity_bar__' in self.cached_legend_elements:
-            if self.cached_legend_elements['__intensity_bar__']['is_valid']:
-                return(self.cached_legend_elements['__intensity_bar__']['element'])
-        else:
-            self.init_element_cache(element='__intensity_bar__')
-
         if self.mini_legend_mode:
             legend = self.mini_legend
         else:
@@ -736,8 +668,6 @@ class Specgram(object):
                 CursesPixel(text=upper_bound.rjust(int(legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
             ])
         intensity_bar.extend([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)])
-        self.cached_legend_elements['__intensity_bar__']['element'] = intensity_bar
-        self.cached_legend_elements['__intensity_bar__']['is_valid'] = True
         return(intensity_bar)
 
     def get_formatted_dt(self):
@@ -747,12 +677,12 @@ class Specgram(object):
             dt = None
         return(dt)
 
+    @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')
     def cycle_channels(self, key):
-        self.cached_legend_elements['__channel_bar__']['is_valid'] = False
         self.display_channel += 1
 
+    @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__plot_mode_bar__')
     def handle_plot_state_change(self, event):
-        self.cached_legend_elements['__plot_mode_bar__']['is_valid'] = False
         if 'RESIZE' in event:
             # see if we can expand the plot to fit the window
             self.handle_nfft(expand=True)
@@ -900,10 +830,10 @@ class Specgram(object):
 
         except ValueError:
             # TODO handle values too low error with popup error
+            self.ui.flash_message(output=['Voltage Values TOO LOW!'], duration_sec=1.5)
             return([])
         except ZeroDivisionError:
-            # self.log('Found empty data file!')
-            # Empty data file!
+            self.log('Found empty data file!')
             error_text = [
                 'THIS DATA FILE IS EMPTY!'.center(self.window.columns),
                 'You are seeing this messages because the default behavior-'.center(self.window.columns),
