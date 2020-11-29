@@ -31,10 +31,12 @@ from common import (
         RIGHT
     )
 
-def run_cli(ui, specgram):
-    # ui.run_async()
-    while True: 
-        ui.spin()
+def run_cli(ui, specgram, do_run_async=False):
+    if do_run_async:
+        ui.run_async()
+    else:
+        while True: 
+            ui.spin()
 
 def handle_config(args):
     import json
@@ -73,27 +75,98 @@ def main(stdscr, args):
 
     try:
         run_cli(ui=ui,
-                specgram=specgram)
+                specgram=specgram,
+                do_run_async=False)
     finally:
         specgram.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='cli-spectrogram')
-    parser.add_argument('--sample-rate', help='', required=False, type=float)
-    parser.add_argument('--device-name', help='', default=None, type=str)
-    parser.add_argument('--file-length', help='in seconds', required=False, type=float)
-    parser.add_argument('-d','--debug', action='store_true', help='Show debugging print messsages', required=False)
-    parser.add_argument('--skip-empty', action='store_true', help='Skip empty data files -- do not show gaps', required=False)
-    parser.add_argument('-r', '--right-hand-legend', action='store_true', 
-                        help='Orient the legend to stick to the right side (default: left)', required=False)
-    parser.add_argument('--stacked-mode', action='store_true', help='Start in stacked-mode', required=False)
-    parser.add_argument('--source', help='Source directory with .txt files', required=False)
-    parser.add_argument('--threshold-steps', help='How many dB above and below threshold', required=False, type=int)
-    parser.add_argument('-c','--display-channel', help='', required=False, type=int, choices=range(0, 8))
-    parser.add_argument('-t','--threshold-db', help='', required=False, type=int)
-    parser.add_argument('-m','--markfreq-hz', help='', required=False, type=int)
-    parser.add_argument('--nfft', help='', required=False, type=int)
-    parser.add_argument('--use-config', help='Use config file', action='store_true')    
+    parser = argparse.ArgumentParser(description='''cli-spectrogram -- This tool was
+                                                    created to facilitate viewing voltage data
+                                                    (in the original use-case, voltage data was
+                                                    collected from a hydrophone) 
+                                                    as a spectrogram in the command line.''')
+    parser.add_argument('--sample-rate', 
+                        help='''Sample rate the data files were sampled at (in Hz)
+                                (Default: 19200.0Hz)
+                                * this cannot be changed during operation.''', 
+                        required=False, 
+                        type=float)
+    parser.add_argument('--device-name', 
+                        help='''Helpful for when you have multiple instances of the
+                                cli-spectrogram running. (Default: None)
+                                * this cannot be changed during operation.''',    
+                        default=None, 
+                        type=str)
+    parser.add_argument('--file-length', 
+                        help='''Describes the file length in seconds.
+                                If you have a sample-rate of 100.0Hz and a file-length of 1.0 seconds,
+                                you *should have 100 rows of data PER file! (Default: 1.0 sec)
+                                * this cannot be changed during operation.''', 
+                        required=False, 
+                        type=float)
+    parser.add_argument('--source', 
+                        help='''Source directory with .txt files. 
+                                Compatible files will format voltage values in comma separated columns
+                                where each column represents a channel and each row represents a discrete
+                                moment in time.
+                                (Default: current working directory)
+                                * this cannot be changed during operation.''', 
+                        required=False)
+    parser.add_argument('-d','--debug',
+                        help='Show debugging print messages', 
+                        action='store_true', 
+                        required=False)
+    parser.add_argument('--nfft', 
+                        help='''Starting NFFT.
+                                (Default: 240)''', 
+                        required=False, 
+                        type=int)
+    parser.add_argument('-c','--display-channel', 
+                        help='''Select the channel you want to start with.
+                                The current limit is 8 channels. The channels are zero indexed!
+                                If you would like to look at the second channel you would pass \"-c 1\".
+                                (Default: 0)''', 
+                        required=False, 
+                        type=int, 
+                        choices=range(0, 8))
+    parser.add_argument('--threshold-steps', 
+                        help='''Starting threshold-steps will define the color intensity.
+                                (Default: 5dB)''', 
+                        required=False, 
+                        type=int)
+    parser.add_argument('-t','--threshold-db', 
+                        help='''Starting threshold. (Default: 85dB)''', 
+                        required=False, 
+                        type=int)
+    parser.add_argument('-m','--markfreq-hz', 
+                        help='''Starting frequency to \"mark\" with a vertical line.
+                                (Default: 5,000Hz)''', 
+                        required=False, 
+                        type=int)
+    parser.add_argument('--use-config', 
+                        help='''Use JSON config file. This flag is for use with 
+                                the MCC_DAQ driver found here: https://github.com/caileighf/MCC_DAQ''', 
+                        action='store_true')
+    parser.add_argument('--skip-empty', 
+                        help='''Skip empty data files -- do not show gaps (Default: False)
+                                * this cannot be changed during operation.''', 
+                        action='store_true', 
+                        required=False)
+    parser.add_argument('-r', '--right-hand-legend',
+                        help='''Start with the legend of the Right side of the console. This can be
+                                moved during operation and will \"stick\" to the opposite side if it
+                                travels all the way there.
+                                (Default: Left)''', 
+                        action='store_true', 
+                        required=False)
+    parser.add_argument('--stacked-mode', 
+                        help='''Start in stacked-mode. Stacked mode will display an overlapping legend
+                                rather than a \"Best-fit\" mode where nothing is covered and the plot is 
+                                shrunk to fit the available space. (Default: Best-fit)''', 
+                        action='store_true', 
+                        required=False)
+
     parser.set_defaults(source=os.getcwd(), 
                         display_channel=0, 
                         threshold_db=85, 

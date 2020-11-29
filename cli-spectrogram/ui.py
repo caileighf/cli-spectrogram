@@ -181,7 +181,8 @@ class Ui(object):
         self._overlap_mode ^= True
         self.handle_refit(state_just_changed=True)
 
-    def handle_refit(self, *args, state_just_changed=False):
+    def handle_refit(self, *args, **kwargs):
+        state_just_changed = kwargs['state_just_changed']
         plot_name, plot = [(k, p) for k, p in self.panels.items() if 'plot' in k][0]
     
         if state_just_changed:

@@ -132,6 +132,8 @@ POTENTIAL_POSITIONS = [TOP, BOTTOM, LEFT, RIGHT, TOP_LEFT, TOP_RIGHT, BOTTOM_LEF
 CursesPixel = namedtuple('CursesPixel', ['text', 'fg', 'bg', 'attr'])
 Line = namedtuple('Line', ['data', 'attr_mask'])
 
+is_python_2_7 = sys.version[0:3] == '2.7'
+
 def accumulate(x, l=[0]): l[0] += x; return l[0];
 
 def get_fitted_window(legend_managers):

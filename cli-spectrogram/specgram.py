@@ -13,8 +13,9 @@
 # File: specgram.py
 #
 from __future__ import print_function
+from collections import OrderedDict
 from cached_ui_elements import (handle_ui_element_cache, invalidate_ui_element_cache, invalidate_cache)
-from common import (KeystrokeCallable, WindowDimensions, FileNavManager, CursesPixel)
+from common import (KeystrokeCallable, WindowDimensions, FileNavManager, CursesPixel, is_python_2_7)
 from common import (default_emphasis, ESC, Q_MARK, SHIFT_UP, SHIFT_DOWN, SHIFT_LEFT, SHIFT_RIGHT)
 from common import (
         TOP_LEFT,
@@ -292,7 +293,7 @@ class Specgram(object):
             self.register_keystroke_callable(keystroke_callable=key, update=True)
 
     def log(self, output, end='\n'):
-        with open('keystokes.log', 'a+') as f:
+        with open('keystrokes.log', 'a+') as f:
             f.write('[{}]: {}{}'.format(int(time.time()), output, end))
 
     def close(self):
@@ -372,15 +373,32 @@ class Specgram(object):
                 },
             },
         }
+
+        if is_python_2_7:
+            legend_dict['UPPER'] = OrderedDict(sorted(legend_dict['UPPER'].items()))
+            legend_dict['UPPER']['File Information']\
+             = OrderedDict(sorted(legend_dict['UPPER']['File Information'].items()))
+            legend_dict['UPPER']['Spectrogram Information']\
+             = OrderedDict(sorted(legend_dict['UPPER']['Spectrogram Information'].items()))
+            legend_dict['LOWER']['Keyboard Shortcuts']\
+             = OrderedDict(sorted(legend_dict['LOWER']['Keyboard Shortcuts'].items()))
+
         return(legend_dict)
 
     def _init_ui_help(self):
-        help_ = self.get_formatted_kb_shortcuts()
+        try:
+            help_ = self.get_formatted_kb_shortcuts()
+        except KeyError:
+            help_ = {'Problem loading shortcuts':'Check legend keys'}
+
         rc = self.ui.set_help_info(info=help_, title='Spectrogram Keyboard Shortcuts')
         return(rc)
 
     def get_formatted_kb_shortcuts(self):
-        return(self.legend_data()['LOWER']['Keyboard Shortcuts'])
+        try:
+            return(self.legend_data()['LOWER']['Keyboard Shortcuts'])
+        except KeyError:
+            raise KeyError('Unable to get formatted keyboard shortcuts! Check legend keys')
 
     @invalidate_cache(cache='cached_legend_elements')
     def handle_minimal_mode(self, *args):
@@ -482,29 +500,7 @@ class Specgram(object):
                 cursor_pos = self.file_manager.move_to_end()
                 if self.mini_legend_mode:
                     self.toggle_minimal_mode()
-            # elif key.key_id == KEY_LEFT or key.key_id == KEY_RIGHT:
-            #     if key.key_id == KEY_RIGHT:
-            #         self.markfreq_hz += 100
-            #     else:
-            #         self.markfreq_hz -= 100
-            #     self.markfreq_hz = self.markfreq_hz if self.markfreq_hz >= 1 else 1
-            #     self.markfreq_hz = self.markfreq_hz if self.markfreq_hz <= 10000 else 10000
-            # elif key.key_id == KEY_UP or key.key_id == KEY_DOWN:
-            #     self.handle_plot_attrs_cache()
-            #     if key.key_id == KEY_UP:
-            #         self.threshold_db += self.threshold_steps
-            #     else:
-            #         self.threshold_db -= self.threshold_steps
-            #     self.threshold_db = self.threshold_db if self.threshold_db >= 1 else 1
-            #     self.threshold_db = self.threshold_db if self.threshold_db <= 150 else 150
-            # elif key.key_id == SHIFT_UP or key.key_id == SHIFT_DOWN:
-            #     self.handle_plot_attrs_cache()
-            #     if key.key_id == SHIFT_UP:
-            #         self.nfft += self.nfft_step
-            #     else:
-            #         self.nfft -= self.nfft_step
-            # elif key.key_id == SHIFT_LEFT or key.key_id == SHIFT_RIGHT:
-            #     self.handle_move_legend(key)
+
         stop = time.time()
         self.log('specgram::handle_navigation() Timer: %.3f seconds' % (stop - start))
 

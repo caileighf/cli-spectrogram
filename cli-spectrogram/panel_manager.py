@@ -1,7 +1,7 @@
 from __future__ import print_function
 from cached_ui_elements import cache_element
 from common import Cursor
-from common import (WindowDimensions, CursesPixel, Cursor, get_term_size)
+from common import (WindowDimensions, CursesPixel, Cursor, get_term_size, is_python_2_7)
 from common import (
         TOP_LEFT,
         TOP_RIGHT,
@@ -399,7 +399,7 @@ class PanelManager(object):
         pass
     
     def clear_buffer(self):
-        self.buffer.clear()
+        self.buffer = []
 
     def printch(self, ch, attr=None, color=1):
         try:
