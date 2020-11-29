@@ -294,7 +294,7 @@ class FileNavManager(object):
             next_file = self._files[self.cursor_pos - 1]
         # if streaming advance cursor 1 file
         if self.is_streaming(): 
-            self.cursor_pos += 1
+            self.cursor_pos = len(self._files)
 
         self._current_file = next_file
         return(self.current_file)

@@ -375,13 +375,17 @@ class Specgram(object):
         }
 
         if is_python_2_7:
-            legend_dict['UPPER'] = OrderedDict(sorted(legend_dict['UPPER'].items()))
-            legend_dict['UPPER']['File Information']\
-             = OrderedDict(sorted(legend_dict['UPPER']['File Information'].items()))
-            legend_dict['UPPER']['Spectrogram Information']\
-             = OrderedDict(sorted(legend_dict['UPPER']['Spectrogram Information'].items()))
-            legend_dict['LOWER']['Keyboard Shortcuts']\
-             = OrderedDict(sorted(legend_dict['LOWER']['Keyboard Shortcuts'].items()))
+            if self.mini_legend_mode:
+                legend_dict['__minimal__']['Spectrogram Information']\
+                 = OrderedDict(sorted(legend_dict['__minimal__']['Spectrogram Information'].items()))
+            else:
+                legend_dict['UPPER'] = OrderedDict(sorted(legend_dict['UPPER'].items()))
+                legend_dict['UPPER']['File Information']\
+                 = OrderedDict(sorted(legend_dict['UPPER']['File Information'].items()))
+                legend_dict['UPPER']['Spectrogram Information']\
+                 = OrderedDict(sorted(legend_dict['UPPER']['Spectrogram Information'].items()))
+                legend_dict['LOWER']['Keyboard Shortcuts']\
+                 = OrderedDict(sorted(legend_dict['LOWER']['Keyboard Shortcuts'].items()))
 
         return(legend_dict)
 
