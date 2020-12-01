@@ -58,7 +58,6 @@ def main(stdscr, args):
 
     ui = Ui(stdscr=stdscr, refresh_hz=args.file_length)
     specgram = Specgram(source=args.source,
-                        register_keystroke_callable=ui.register_keystroke_callable,
                         ui=ui,
                         display_channel=args.display_channel,
                         device_name=args.device_name,
@@ -76,7 +75,7 @@ def main(stdscr, args):
     try:
         run_cli(ui=ui,
                 specgram=specgram,
-                do_run_async=False)
+                do_run_async=True)
     finally:
         specgram.close()
 

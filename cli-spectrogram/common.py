@@ -20,8 +20,7 @@ import pathlib
 import curses
 import traceback
 
-default_fg = curses.COLOR_BLACK
-default_bg = curses.COLOR_WHITE
+default_bg = curses.COLOR_BLACK
 default_emphasis = curses.A_NORMAL
 ESC = 27
 SHIFT_UP = 337
@@ -29,6 +28,9 @@ SHIFT_DOWN = 336
 SHIFT_LEFT = 393
 SHIFT_RIGHT = 402
 Q_MARK = 63
+
+MARINE_TEAL = 17
+BACKGROUND_COLOR = default_bg
 
 STANDOUT_GREEN = 50
 STANDOUT_RED = 51
@@ -54,6 +56,9 @@ def init_color_pairs():
     curses.init_pair(curses.COLOR_YELLOW,  curses.COLOR_BLACK, curses.COLOR_YELLOW)
     curses.init_pair(curses.COLOR_MAGENTA, curses.COLOR_BLACK, curses.COLOR_MAGENTA)
     curses.init_pair(curses.COLOR_RED,     curses.COLOR_BLACK, curses.COLOR_RED)
+
+    curses.init_pair(MARINE_TEAL, curses.COLOR_BLACK, MARINE_TEAL)
+
     curses.init_pair(STANDOUT_GREEN, curses.COLOR_GREEN, -1)
     curses.init_pair(STANDOUT_RED, curses.COLOR_RED, -1)
 
@@ -285,7 +290,7 @@ class FileNavManager(object):
         self._state = 'Streaming'
         self.cursor_pos = len(self._files)
         return(self.cursor_pos)
-    
+
     def next_file(self):
         self.validate_cursor()
         if len(self._files) <= 0:

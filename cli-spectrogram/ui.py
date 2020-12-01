@@ -52,7 +52,7 @@ class Ui(object):
 
     The Ui class manages all things related to curses and what is displayed
     """
-    def __init__(self, stdscr, refresh_hz=0):
+    def __init__(self, stdscr, refresh_hz=0, audio_bell=True):
         super(Ui, self).__init__()
         init_color_pairs()
         init_mouse()
@@ -60,6 +60,7 @@ class Ui(object):
         self.key_buffer = deque()
         self.base_window = stdscr
         self.refresh_rate = refresh_hz
+        self.audio_bell = audio_bell # defines which kind of bell we use
         # holds all panels (other classes can add panels)
         self.panels = {
             'main': self._init_panel(),
@@ -69,7 +70,8 @@ class Ui(object):
         # key map callables (on key do x)
         self._init_keymap()
         self._init_help()
-        # self._init_message_bar()
+        self._init_message_bar()
+        self._init_cmd_map()
         self._overlap_mode = True # panels overlap and are not "fitted" together
         self._original_panel_mode = self.get_panel_mode()
         # set base window to nodelay so getch will be non-blocking
@@ -84,6 +86,12 @@ class Ui(object):
     @property
     def main_window(self):
         return(self.panels['main'])
+
+    def _init_cmd_map(self):
+        self.cmd_map = {}
+        self.register_cmd_callback(pattern='help', callback=[self.toggle_help])
+        self.register_cmd_callback(pattern='exit', callback=[self.stop, self._kill])
+        self.register_cmd_callback(pattern='quit', callback=[self.stop, self._kill])
 
     def _init_keymap(self):
         self.keymap = {}
@@ -101,7 +109,7 @@ class Ui(object):
                                                            case_sensitive=True))
         self.register_keystroke_callable(KeystrokeCallable(key_id=ESC,
                                                            key_name='Escape',
-                                                           call=[self.revert_to_original_mode],
+                                                           call=[self.toggle_cmd_input_mode],
                                                            case_sensitive=True))
         self.register_keystroke_callable(KeystrokeCallable(key_id=ord(' '),
                                                            key_name='Space',
@@ -117,7 +125,7 @@ class Ui(object):
             'UI Keyboard Shortcuts': {
                 'X / x': 'Toggle window mode Stacked / Best Fit',
                 'Delete': 'Exit',
-                'Escape': 'Revert to original layout'
+                'Escape': 'Enter direct command mode'
             }
         }
         height, _ = get_term_size()
@@ -130,11 +138,14 @@ class Ui(object):
         self.is_help_shown = False
 
     def _init_message_bar(self):
-        self.message_bar = self.new_corner_window(corner=BOTTOM, rows=3, columns=None, name='ui_message_bar')
+        self.cmd_input_mode = False
+        self.message_bar = self.new_corner_window(corner=BOTTOM, rows=3, columns=None, name='ui_message_bar', overwrite=True)
+        self.message_bar.border()
         self.message_bar.set_basic_buffer()
-        self.message_bar.border(True)
-        self.message_bar.print('  Hit the space bar or ? to toggle the help window | Ctrl + c to quit ', post_clean=False)
-        
+
+        self.default_msg_bar_text = ' Hit the space bar or ? to toggle the help window | Ctrl + c to quit '
+        self.message_bar.print(self.default_msg_bar_text, post_clean=False)
+
         curses.panel.update_panels()
         curses.doupdate()
 
@@ -149,7 +160,29 @@ class Ui(object):
     def get_help_info(self):
         return(self.help_info)
 
-    def toggle_help(self, *args):
+    def handle_cmd_callbacks(self, cmd):
+        cmd = cmd.replace('=', ' ')
+        args = cmd.split()
+        if args[0] in self.cmd_map:
+            key = cmd
+        else:
+            key = '__any__'
+
+        if len(args) > 1:
+            [call(key=args[0], val=args[-1]) for call in self.cmd_map[key]]
+        else:
+            [call(key=args[0]) for call in self.cmd_map[key]]
+
+    def toggle_cmd_input_mode(self, *args):
+        self.cmd_input_mode ^= True
+        if self.cmd_input_mode:
+            self.cmd_input_mode = False
+            cmd = self.message_bar.get_user_input()
+            self.message_bar.print(self.default_msg_bar_text, post_clean=False)
+            if cmd != None and cmd != '':
+                self.handle_cmd_callbacks(cmd)
+
+    def toggle_help(self, *args, **kwargs):
         self.is_help_shown ^= True
         self.legend_managers['ui_help_legend'].toggle_all()
 
@@ -182,7 +215,11 @@ class Ui(object):
         self.handle_refit(state_just_changed=True)
 
     def handle_refit(self, *args, **kwargs):
-        state_just_changed = kwargs['state_just_changed']
+        if 'state_just_changed' in kwargs:
+            state_just_changed = kwargs['state_just_changed']
+        else:
+            state_just_changed = False
+
         plot_name, plot = [(k, p) for k, p in self.panels.items() if 'plot' in k][0]
     
         if state_just_changed:
@@ -198,6 +235,14 @@ class Ui(object):
 
     def handle_resize(self, args):
         {panel.handle_resize() for panel_id, panel in self.panels.items() if panel_id != 'main'}
+        
+        # if we successfully center these panels, call init for message bar
+        # .. to re-calc and move the cmd window position
+        if self.panels['flash_message'].center_panel() and\
+         self.legend_managers['ui_help_legend'].center_panels():
+            self._init_message_bar()
+            return(True)
+        return(False)
 
     def save_window(self, name):
         self.saved_windows[name] = '.__{}__'.format(name)
@@ -264,7 +309,7 @@ class Ui(object):
             for opt in mini_options:
                 if side == opt:
                     panels.append(self.new_corner_window(corner=side, 
-                                                         rows=25, 
+                                                         rows=28, 
                                                          columns=50, 
                                                          name='{}_section_{}'.format(name, i)))
             for opt in full_options:
@@ -293,10 +338,17 @@ class Ui(object):
         self.legend_managers[name] = LegendManager(panels, get_legend_dict, type_)
         return(self.legend_managers[name])
 
+    def beep(self, use_default=True):
+        if self.audio_bell:
+            curses.beep() if use_default else curses.flash()
+        else:
+            curses.flash() if use_default else curses.beep()
+
     def flash_message(self, output, duration_sec=1.0, flash_screen=True):
         if flash_screen:
             curses.flash()
 
+        # self.panels['flash_message'].clear()
         self.panels['flash_message'].show()
         self.panels['flash_message'].set_focus()
 
@@ -366,6 +418,20 @@ class Ui(object):
             self.log(traceback.format_exc())
             self.log('Current cursor position: y: {}, x: {}'.format(*self.main_window.window.getyx()))
 
+    def register_general_cmd_callback(self, callback=[]):
+        if '__any__' not in self.cmd_map:
+            self.cmd_map['__any__'] = []
+
+        if not isinstance(callback, list):
+            callback = [callback]
+
+        self.cmd_map['__any__'].extend(callback)
+
+    def register_cmd_callback(self, pattern, callback=[]):
+        if not isinstance(callback, list):
+            callback = [callback]
+        self.cmd_map[pattern] = callback
+
     def register_keystroke_callable(self, keystroke_callable, update=False):
         if keystroke_callable.key_id in self.keymap:
             if not update:
@@ -413,10 +479,16 @@ class Ui(object):
             self.spin()
 
     def spin(self):
+        self.message_bar.set_focus()
+
         start = time.time()
-        for panel_id, panel in self.panels.items():
-            if panel_id != 'main':
-                panel.redraw_warning()
+        try:
+            for panel_id, panel in self.panels.items():
+                if panel_id != 'main':
+                    panel.redraw_warning()
+        except RuntimeError:
+            self.log('Added a panel to Ui panels in another thread! Returning...')
+            return
 
         curses.panel.update_panels()
         curses.doupdate()
@@ -478,7 +550,6 @@ class Ui(object):
                                                          key_name='ERROR Unregistered key: {}'.format(curses.keyname(key)),
                                                          call=[],
                                                          case_sensitive=True))
-        stop = time.time()
 
     def _kill(self, *arg):
         raise KeyboardInterrupt

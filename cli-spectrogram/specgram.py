@@ -18,6 +18,7 @@ from cached_ui_elements import (handle_ui_element_cache, invalidate_ui_element_c
 from common import (KeystrokeCallable, WindowDimensions, FileNavManager, CursesPixel, is_python_2_7)
 from common import (default_emphasis, ESC, Q_MARK, SHIFT_UP, SHIFT_DOWN, SHIFT_LEFT, SHIFT_RIGHT)
 from common import (
+        BACKGROUND_COLOR,
         TOP_LEFT,
         TOP_RIGHT,
         BOTTOM_LEFT,
@@ -59,6 +60,8 @@ from curses import (COLOR_YELLOW,
                     A_BLINK,
                     A_REVERSE,
                     A_STANDOUT,
+                    A_VERTICAL,
+                    A_PROTECT,
                     KEY_MOUSE,
                     KEY_PPAGE,
                     KEY_NPAGE,
@@ -72,7 +75,6 @@ class Specgram(object):
 
     """
     def __init__(self, source,
-                       register_keystroke_callable,
                        ui,
                        device_name,
                        legend_side=RIGHT,
@@ -93,10 +95,10 @@ class Specgram(object):
         self.window.add_callback(self.redraw_specgram)
         self.window.fill_screen = True
         self.window.on_state_change.append(self.handle_plot_state_change)
+        self.window.set_background_color(BACKGROUND_COLOR)
 
         self.max_rows = self.window.rows
         self.max_columns = self.window.columns
-        self.register_keystroke_callable = register_keystroke_callable
         self.vertical_axis_width = 8    # 8 characters for the vertical axis
         self.horizontal_axis_height = 6 # 6 characters for the horizontal axis 
 
@@ -106,6 +108,7 @@ class Specgram(object):
                                                       # we will update once we get a look at the data files
         self.threshold_db = threshold_db
         self.markfreq_hz = markfreq_hz
+        self.markfreq_char = '|'
         self.threshold_steps = threshold_steps
         self.nfft = nfft
         self.nfft_step = 10
@@ -123,6 +126,7 @@ class Specgram(object):
         self.is_scroll_active = False
         self.scroll_up_step = -15
         self.scroll_dn_step = 15
+        self.scroll_top_min = 9
         self.scroll_line_index = {'top': 0, 'bottom': 0}
         self.mini_legend_mode = False
         self.cached_legend_elements = {}
@@ -131,6 +135,7 @@ class Specgram(object):
         self._init_color(use_full_color)
 
         self._init_keymap()
+        self._init_cmd_map()
         self._init_legend(legend_side)
         self._init_ui_help()
         self.handle_plot_state_change(event='INITIAL_RESIZE')
@@ -188,18 +193,25 @@ class Specgram(object):
             self.scroll(lines_to_scroll)
             self.log('scroll_line_index: top: {} bottom: {}'.format(self.scroll_line_index['top'], self.scroll_line_index['bottom']))
         else:
-            self.ui.flash_message(output=['Switching scroll directions!'], duration_sec=1.5)
+            self.ui.flash_message(output=['Switching scroll directions!'], 
+                                  duration_sec=1.5,
+                                  flash_screen=False)
 
     def scroll(self, lines):
         if lines > 0:
-            if self.scroll_line_index['top'] > 9:
+            # this ensures empty files show full error
+            if self.scroll_line_index['top'] > self.scroll_top_min:
                 self.scroll_line_index['top'] -= lines
                 self.scroll_line_index['bottom'] -= lines
+            else:
+                self.ui.beep() # lets user know they hit boundary
         else:
             lines *= -1
             if self.scroll_line_index['bottom'] < len(self.current_rows):
                 self.scroll_line_index['top'] += lines
                 self.scroll_line_index['bottom'] += lines
+            else:
+                self.ui.beep() # lets user know they hit boundary
 
     @invalidate_cache(cache='cached_legend_elements')
     def reverse_color_map(self, *args):
@@ -283,14 +295,14 @@ class Specgram(object):
                               call=[self.handle_navigation]),
             KeystrokeCallable(key_id=ESC,
                               key_name='Escape',
-                              call=[self.handle_navigation]),
+                              call=[]),#self.handle_navigation]),
             KeystrokeCallable(key_id=KEY_MOUSE,
                               key_name='Mouse Event',
                               call=[self.handle_mouse_event],
                               case_sensitive=False),
         ]
         for key in self.keymap:
-            self.register_keystroke_callable(keystroke_callable=key, update=True)
+            self.ui.register_keystroke_callable(keystroke_callable=key, update=True)
 
     def log(self, output, end='\n'):
         with open('keystrokes.log', 'a+') as f:
@@ -422,6 +434,7 @@ class Specgram(object):
                                                   shared_dimension=50, 
                                                   side=TOP_RIGHT)
             self.mini_legend.minimal_mode = True
+            self.mini_legend.footer = 'Show ALL keyboard shortcuts with ? or space'
             self.ui.add_legend_manager(name='specgram_mini_legend', manager=self.mini_legend)
 
         if self.ui.get_panel_mode() == 'Best Fit':
@@ -431,7 +444,9 @@ class Specgram(object):
         self.mini_legend_mode ^= True
         self.handle_minimal_mode()
         if self.mini_legend_mode:
-            self.ui.flash_message(output=['Minimal Legend Mode Active'], duration_sec=1.0)
+            self.ui.flash_message(output=['Minimal Legend Mode Active'], 
+                                  duration_sec=1.0,
+                                  flash_screen=False)
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__dataset_position_marker__')
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__nav_mode_bar__')
@@ -470,6 +485,67 @@ class Specgram(object):
         stop = time.time()
         self.log('specgram::handle_plot_change() Timer: %.3f seconds' % (stop - start))
 
+    def _init_cmd_map(self):
+        self.cmd_map = {}
+        self.ui.register_general_cmd_callback(callback=[self.handle_cmd])
+
+    def goto(self, *args):
+        h = m = s = 0
+        if len(args) > 3 or len(args) < 1:
+            return
+        if len(args) == 3:
+            h, m, s = args
+        elif len(args) == 2:
+            h, m = args
+        elif len(args) == 1:
+            h = args
+
+        rel_time = float(self.file_manager.current_file.stem)
+        rel_time = datetime.datetime.fromtimestamp(rel_time)
+
+        target_time = datetime.datetime.combine(date=rel_time.date(),
+                                                time=datetime.time(hour=int(h),
+                                                                   minute=int(m),
+                                                                   second=int(s)))
+
+        # raise ValueError('{}:{}:{}\n\ntotal delta sec: {}\nrel_t: {}\ntarg_t: {}\n'.format(h, m, s, 
+        #      (rel_time - target_time).total_seconds(), rel_time, target_time))
+        if rel_time > target_time:
+            return int((rel_time - target_time).total_seconds())
+        elif rel_time < target_time:
+            return int(-(rel_time - target_time).total_seconds())
+        # raise ValueError('{}:{}:{}\n\ntotal delta sec: {}\n\n{}'.format(h, m, s, total_delta_sec, rel_time))
+
+    def handle_cmd(self, **kwargs):
+        if kwargs and 'key' in kwargs:
+            key = kwargs['key']
+            if 'val' in kwargs:
+                val = kwargs['val']
+            else:
+                val = None
+        else:
+            self.ui.beep()
+            return
+
+        if key in self.__dict__:
+            _type = type(self.__dict__[key])
+            self.__dict__[key] = _type(val)
+        elif key == 'print' and val in self.__dict__:
+            self.ui.flash_message('{}: {}'.format(val, self.__dict__[val]),
+                                  flash_screen=False,
+                                  duration_sec=1.5)
+        elif 'begin' in key and val == None:
+            self.handle_position_cache()
+            cursor_pos = self.file_manager.move_to_beginning()
+        elif 'end' == key or 'stream' == key and val == None:
+            self.handle_position_cache()
+            cursor_pos = self.file_manager.move_to_end()
+        elif 'goto' == key and val != None:
+            self.handle_position_cache()
+            _time = val.split(':')
+            total_delta_sec = self.goto(*_time)
+            self.file_manager.move_cursor(delta=-int(total_delta_sec / self.file_length_sec))
+
     def handle_navigation(self, key):
         start = time.time()
         if not key.case_sensitive:
@@ -482,15 +558,15 @@ class Specgram(object):
             elif key.key_name.upper() == 'A':
                 self.handle_position_cache()
                 if key.key_name.isupper():
-                    cursor_pos = self.file_manager.move_cursor(delta=-int(60 / self.file_length_sec)) # 10 mins
+                    cursor_pos = self.file_manager.move_cursor(delta=-int(600 / self.file_length_sec)) # 10 mins
                 else:
-                    cursor_pos = self.file_manager.move_cursor(delta=-int(10 / self.file_length_sec))  # 1 min
+                    cursor_pos = self.file_manager.move_cursor(delta=-int(60 / self.file_length_sec))  # 1 min
             elif key.key_name.upper() == 'D':
                 self.handle_position_cache()
                 if key.key_name.isupper():
-                    cursor_pos = self.file_manager.move_cursor(delta=+int(60 / self.file_length_sec)) # 10 mins
+                    cursor_pos = self.file_manager.move_cursor(delta=+int(600 / self.file_length_sec)) # 10 mins
                 else:
-                    cursor_pos = self.file_manager.move_cursor(delta=+int(10 / self.file_length_sec))  # 1 min
+                    cursor_pos = self.file_manager.move_cursor(delta=+int(60 / self.file_length_sec))  # 1 min
 
         else:
             if key.key_id == KEY_PPAGE:
@@ -509,10 +585,15 @@ class Specgram(object):
         self.log('specgram::handle_navigation() Timer: %.3f seconds' % (stop - start))
 
     def handle_move_legend(self, key):
-        if key.key_id == SHIFT_LEFT:
-            self.legend.move_left()
+        if self.mini_legend_mode:
+            legend = self.mini_legend
         else:
-            self.legend.move_right()
+            legend = self.legend
+
+        if key.key_id == SHIFT_LEFT:
+            legend.move_left()
+        elif key.key_id == SHIFT_RIGHT:
+            legend.move_right()
 
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__dataset_position_marker__')  
     def create_dataset_position_bar(self):
@@ -548,6 +629,7 @@ class Specgram(object):
 
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')  
     def create_channel_bar(self):
+        self.validate_channel_count()
         if self.mini_legend_mode:
             legend = self.mini_legend
         else:
@@ -733,6 +815,13 @@ class Specgram(object):
             for row in formatted_data:
                 self.window.buffer.append(row)
 
+    def validate_channel_count(self):
+        with open(str(self.file_manager.next_file()), 'r') as f:
+            line = f.readline()
+            self.available_channels = len(line.strip().split(','))
+            
+        self.file_manager.move_to_end()
+
     def get_data(self):
         self.current_file = self.file_manager.next_file()
         data = []
@@ -801,6 +890,15 @@ class Specgram(object):
                     self.nfft -= self.nfft_step
                     break
 
+        if self.nfft <= 0:
+            self.nfft = 0
+            if not self.full_screen_mode:
+                self.ui.flash_message(['Hiding legend(s)-',
+                                       '-to fit Spectrogram!'], 
+                                       flash_screen=False)
+                self.full_screen(None)
+                self.handle_nfft(expand=True)
+
     def format_x_axis_pixels(self, line, attr):
         formatted_row = []
         for i in range(len(line)):
@@ -830,7 +928,10 @@ class Specgram(object):
 
         except ValueError:
             # TODO handle values too low error with popup error
-            self.ui.flash_message(output=['Voltage Values TOO LOW!'], duration_sec=1.5)
+            self.ui.flash_message(output=['NFFT set TOO LOW!',
+                                          'nfft: {}'.format(self.nfft)], 
+                                  duration_sec=1.5,
+                                  flash_screen=False)
             return([])
         except ZeroDivisionError:
             self.log('Found empty data file!')
@@ -845,7 +946,7 @@ class Specgram(object):
                 formatted_data.append([CursesPixel(text=line, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_BOLD)])
             return(formatted_data)
 
-        freqlist = numpy.fft.fftfreq(self.nfft) * self.sample_rate
+        freqlist = numpy.fft.fftfreq(abs(self.nfft)) * self.sample_rate
         maxfreq = freqlist[int(self.nfft / 2 - 1)]
         minfreq = freqlist[1]
 
@@ -868,7 +969,7 @@ class Specgram(object):
                 if col != freq_marker_column:
                     formatted_row.append(CursesPixel(text=' ', fg=COLOR_BLACK, bg=color, attr=A_NORMAL))
                 else:
-                    formatted_row.append(CursesPixel(text='|', fg=COLOR_BLACK, bg=color, attr=A_BOLD))
+                    formatted_row.append(CursesPixel(text=self.markfreq_char, fg=COLOR_BLACK, bg=color, attr=A_BOLD))
             formatted_data.append(formatted_row)
 
         # append x-axis data to output buffer in reverse order

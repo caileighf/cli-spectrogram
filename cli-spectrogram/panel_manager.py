@@ -1,4 +1,5 @@
 from __future__ import print_function
+from collections import deque
 from cached_ui_elements import cache_element
 from common import Cursor
 from common import (WindowDimensions, CursesPixel, Cursor, get_term_size, is_python_2_7)
@@ -14,13 +15,15 @@ from common import (
         SPLIT_V_STACK,
         SPLIT_H_STACK,
         SINGLE_V,
-        SINGLE_H
+        SINGLE_H,
+        ESC
     )
 import traceback
 import time
 import curses
+import curses.textpad
 
-BUMPER_CAR_MODE = True
+BUMPER_CAR_MODE = False
 
 class LegendManager(object):
     """docstring for LegendManager"""
@@ -198,6 +201,12 @@ class LegendManager(object):
         for p in self.panels:
             p.show()
 
+    def center_panels(self):
+        for p in self.panels:
+            if not p.center_panel():
+                return(False)
+        return(True)
+
     def snap_back(self):
         try:
             [p.snap_back() for p in self.panels]
@@ -241,9 +250,42 @@ class LegendManager(object):
 
         if self.footer != None:
             self.panels[0].buffer.append(self.panels[0].hline(ch=' '))
-            self.panels[0].buffer.append(self.panels[0].hline(ch='='))
+            self.panels[0].buffer.append(self.panels[0].hline(ch='?'))
             self.panels[0].buffer.append([CursesPixel(text='{}'.format(self.footer.center(self.panels[0].columns)), fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD),])
 
+def handle_exit_input(key):
+    if key == curses.ascii.NL or key == 10:
+        return curses.ascii.BEL
+    elif key == ESC:
+        raise ValueError('Escape key -- cancel edit')
+
+    #   Next section allows cmd history to be accessed with arrow keys
+    #
+    elif key == curses.KEY_UP or key == curses.KEY_DOWN:
+        global text_box; text_box.win.clear()
+        text_box.win.refresh()
+        global current_history_index;
+        global text_box_history;
+
+        if key == curses.KEY_UP:
+            if current_history_index == None:
+                current_history_index = 0
+            else:
+                current_history_index += 1
+        else:
+            if current_history_index != None and current_history_index >= 1:
+                current_history_index -= 1
+            else:
+                return key
+
+        try:
+            text_box.win.addstr(text_box_history[current_history_index])
+        except IndexError:
+            text_box.win.addstr(text_box_history[-1])
+        else:
+            return None
+
+    return key
 
 class PanelManager(object):
     """docstring for PanelManager
@@ -260,6 +302,7 @@ class PanelManager(object):
         super(PanelManager, self).__init__()
         self.panel = panel
         self.border_on = border_on
+        self.border_ch = None
         self.corner = corner
         self.sticky_sides = sticky_sides
         # create empty buffer for data
@@ -318,8 +361,46 @@ class PanelManager(object):
     @property
     def is_drawn(self):
         return self._is_drawn
+
+    def get_window_size(self):
+        rows, columns = self.window.getmaxyx()
+        return(rows, columns)
+
+    def create_text_box(self):
+        self.text_box_win = self.window.derwin(1, 0, 1, 2)
+        global text_box
+        text_box = curses.textpad.Textbox(self.text_box_win, 
+                                          insert_mode=True)
+
+        global text_box_history; text_box_history = deque(maxlen=500)
+        global current_history_index; current_history_index = None
+
+    def get_user_input(self):
+        if not hasattr(self, 'text_box_win'):
+            self.create_text_box()
+
+        self.printch(' :', attr=curses.A_BOLD, color=None)
+        self.clean_window()
+        self.window.refresh()
+
+        global text_box
+        global text_box_history
+
+        try:
+            cmd = text_box.edit(handle_exit_input)
+        except ValueError:
+            cmd = None
+        else:
+            cmd = cmd.strip(' x')
+            text_box_history.appendleft(cmd)
+        finally:
+            global current_history_index; current_history_index = None
+            self.window.erase()
+            self.text_box_win.erase()
+        return(cmd)
     
-    def border(self, flag=True):
+    def border(self, flag=True, ch=None):
+        self.border_ch = ch
         if self.border_on != flag:
             self.border_on = flag
             self._init_window(self.window_dimensions)
@@ -401,9 +482,12 @@ class PanelManager(object):
     def clear_buffer(self):
         self.buffer = []
 
-    def printch(self, ch, attr=None, color=1):
+    def printch(self, ch, attr=None, color=-1):
         try:
-            self.window.addstr(ch, curses.color_pair(color) | attr)
+            if color == None:
+                self.window.addstr(ch, attr)
+            else:
+                self.window.addstr(ch, curses.color_pair(color) | attr)
         except curses.error:
             if ch == '\n':
                 pass # we wrote past window
@@ -439,7 +523,8 @@ class PanelManager(object):
 
         if not self.basic_buffer:
             self.clean_window()
-        elif self.border_on:
+
+        if self.border_on:
             self.add_border()
 
         self.log('length of buffer: {}, term_size: {}'.format(len(self.buffer), self.term_size))
@@ -488,8 +573,39 @@ class PanelManager(object):
         if self.border_on:
             self.add_border()
 
+    def clear(self):
+        self.window.move(0, 0)
+        self.clean_window()
+
     def reset_position(self):
         self.move(x=self.window_dimensions.x, y=self.window_dimensions.y)
+
+    def center_panel(self):
+        target_x = self.window_dimensions.x
+        target_y = self.window_dimensions.y
+        max_y, max_x = self.term_size
+        # if this panel is larger than the available console, just bump to top right corner
+        if self.rows < max_y:
+            target_y = (max_y - self.rows) / 2
+        else:
+            target_y = 0
+
+        if self.columns < max_x:
+            target_x = (max_x - self.columns) / 2
+        else:
+            target_x = 0
+
+        # if no change to panel position, no need to create a new window
+        if target_x != self.window_dimensions.x or\
+           target_y != self.window_dimensions.y:
+            new_win = WindowDimensions(x=target_x,
+                                       y=target_y,
+                                       rows=self.window_dimensions.rows,
+                                       columns=self.window_dimensions.columns)
+            self._init_window(new_win)
+            self.reset_position()
+            return(True)
+        return(False)
 
     def move(self, x, y):
         try:
@@ -523,6 +639,8 @@ class PanelManager(object):
                                        rows=self.window_dimensions.rows,
                                        columns=self.window_dimensions.columns)
             self._init_window(new_win)
+        else:
+            return(False)
 
     def move_right(self):
         if self.move(x=self.window_dimensions.x + 1, y=self.window_dimensions.y):
@@ -531,6 +649,11 @@ class PanelManager(object):
                                        rows=self.window_dimensions.rows,
                                        columns=self.window_dimensions.columns)
             self._init_window(new_win)
+        else:
+            return(False)
+
+    def set_background_color(self, color, ch=' '):
+        self.window.bkgdset(ch, curses.color_pair(color))
 
     def add_border(self):
         self.window.box()
@@ -553,7 +676,7 @@ class PanelManager(object):
 
     def replace(self, window):
         self.panel.replace(window)
-        rows, columns = self.window.getmaxyx()
+        rows, columns = self.term_size
         y, x = self.window.getparyx()
         window_dimensions = WindowDimensions(x=x,
                                              y=y,
