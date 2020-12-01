@@ -139,7 +139,12 @@ class Ui(object):
 
     def _init_message_bar(self):
         self.cmd_input_mode = False
-        self.message_bar = self.new_corner_window(corner=BOTTOM, rows=3, columns=None, name='ui_message_bar', overwrite=True)
+        self.message_bar = self.new_corner_window(corner=BOTTOM, 
+                                                  rows=3, 
+                                                  columns=None, 
+                                                  name='ui_message_bar', 
+                                                  overwrite=True) # overwrite makes this init method
+                                                                  # ..suitable for calling on RESIZE
         self.message_bar.border()
         self.message_bar.set_basic_buffer()
 
