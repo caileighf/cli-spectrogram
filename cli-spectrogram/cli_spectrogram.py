@@ -56,7 +56,7 @@ def main(stdscr, args):
     if args.use_config:
         args = handle_config(args)
 
-    ui = Ui(stdscr=stdscr, refresh_hz=args.file_length)
+    ui = Ui(stdscr=stdscr, refresh_hz=0)#args.file_length)
     specgram = Specgram(source=args.source,
                         ui=ui,
                         display_channel=args.display_channel,

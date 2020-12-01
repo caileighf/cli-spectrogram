@@ -316,6 +316,7 @@ class Specgram(object):
             'UPPER': {
                 'File Information': {
                     'File': self.file_manager.current_file.name,
+                    'Data Loc': str(self.get_formatted_data_dir()),
                     'Time': str(self.get_formatted_dt()),
                     'Device Name': self.device_name,
                     '__dataset_position_marker__':
@@ -758,6 +759,15 @@ class Specgram(object):
         except:
             dt = None
         return(dt)
+
+    def get_formatted_data_dir(self):
+        dir_str = str(self.file_manager.current_file.parent)
+        max_width = self.mini_legend.columns - 20\
+         if self.mini_legend_mode\
+          else self.legend.columns - 20
+
+        formatted_dir = dir_str[-(max_width):] + '/'
+        return('<<' + formatted_dir[formatted_dir.find('/') + 1:])
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')
     def cycle_channels(self, key):
