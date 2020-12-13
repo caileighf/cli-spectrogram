@@ -573,14 +573,9 @@ class Specgram(object):
             if key.key_id == KEY_PPAGE:
                 self.handle_position_cache()
                 cursor_pos = self.file_manager.move_cursor(delta=-1)
-            elif key.key_id == KEY_NPAGE:
+            elif key.key_id == KEY_NPAGE and not self.file_manager.is_streaming():
                 self.handle_position_cache()
                 cursor_pos = self.file_manager.move_cursor(delta=1)
-            elif key.key_id == ESC:
-                self.handle_position_cache()
-                cursor_pos = self.file_manager.move_to_end()
-                if self.mini_legend_mode:
-                    self.toggle_minimal_mode()
 
         stop = time.time()
         self.log('specgram::handle_navigation() Timer: %.3f seconds' % (stop - start))
