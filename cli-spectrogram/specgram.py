@@ -14,6 +14,7 @@
 #
 from __future__ import print_function
 from collections import OrderedDict
+from waterfall_buffer import WaterfallBuffer
 from cached_ui_elements import (handle_ui_element_cache, invalidate_ui_element_cache, invalidate_cache)
 from common import (KeystrokeCallable, WindowDimensions, FileNavManager, CursesPixel, is_python_2_7)
 from common import (default_emphasis, ESC, Q_MARK, SHIFT_UP, SHIFT_DOWN, SHIFT_LEFT, SHIFT_RIGHT)
@@ -47,6 +48,7 @@ import numpy
 import math
 import datetime
 import traceback
+import threading
 from curses import (COLOR_YELLOW,
                     COLOR_MAGENTA,
                     COLOR_RED,
@@ -78,6 +80,7 @@ class Specgram(object):
                        ui,
                        device_name,
                        legend_side=RIGHT,
+                       full_size_legend=True,
                        display_channel=0, 
                        threshold_db=90, 
                        markfreq_hz=5000, 
@@ -136,11 +139,34 @@ class Specgram(object):
 
         self._init_keymap()
         self._init_cmd_map()
-        self._init_legend(legend_side)
+        self._init_legend(legend_side, show=full_size_legend)
+        self._init_mini_legend(show=not full_size_legend)
         self._init_ui_help()
         self.handle_plot_state_change(event='INITIAL_RESIZE')
+        self.ui.register_shutdown_callback(self.shutdown)
 
-    def _init_legend(self, legend_side):
+    @property
+    def active_legend(self):
+        if self.mini_legend_mode:
+            return(self.mini_legend)
+        return(self.legend)
+
+    def shutdown(self, *args):
+        if hasattr(self, '_waterfall_buffer_thread'):
+            self.stop_waterfall = True
+            self._waterfall_buffer_thread.join()
+
+    def _init_buffer_thread(self):
+        # the waterfall buffer
+        self.stop_waterfall = False
+        self._waterfall_buffer_thread = threading.Thread(target=self.pop_waterfall_buffer)
+        self._waterfall_buffer_thread.start()
+
+    def pop_waterfall_buffer(self):
+        while not self.stop_waterfall:
+            pass
+
+    def _init_legend(self, legend_side, show=True):
         rows, _ = self.window.term_size
         self.legend = self.ui.new_legend(name='specgram_legend', 
                                          num_panels=1, 
@@ -152,6 +178,20 @@ class Specgram(object):
         self.legend.footer = 'Show ALL keyboard shortcuts with ? or space'
         self.legend.set_x_label('Frequency (Hz)')
         self.legend.set_y_label('Time (relative to file start)')
+        if not show:
+            self.legend.hide_all()
+
+    def _init_mini_legend(self, show=False):
+        self.mini_legend = self.ui.new_legend(name='specgram_mini_legend', 
+                                              num_panels=1, 
+                                              get_legend_dict=self.legend_data, 
+                                              type_=SINGLE_H, 
+                                              shared_dimension=50, 
+                                              side=TOP_RIGHT)
+        self.mini_legend.minimal_mode = True
+        self.mini_legend.footer = 'Show ALL keyboard shortcuts with ? or space'
+        if not show:
+            self.mini_legend.hide_all()
 
     def _init_color(self, use_full_color):
         self.use_full_color = use_full_color
@@ -581,30 +621,20 @@ class Specgram(object):
         self.log('specgram::handle_navigation() Timer: %.3f seconds' % (stop - start))
 
     def handle_move_legend(self, key):
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
         if key.key_id == SHIFT_LEFT:
-            legend.move_left()
+            self.active_legend.move_left()
         elif key.key_id == SHIFT_RIGHT:
-            legend.move_right()
+            self.active_legend.move_right()
 
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__dataset_position_marker__')  
     def create_dataset_position_bar(self):
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
         if self.file_manager.is_streaming():
             return([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)])
 
         top_bar = [CursesPixel(text='  ', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)]
         bottom_bar = [CursesPixel(text='  ', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)]
-        for i in range(int(self.file_manager.total_files * ((legend.columns - 4) / self.file_manager.total_files))):
-            ioi = i == int(self.file_manager.current_position * ((legend.columns - 4) / self.file_manager.total_files))
+        for i in range(int(self.file_manager.total_files * ((self.active_legend.columns - 4) / self.file_manager.total_files))):
+            ioi = i == int(self.file_manager.current_position * ((self.active_legend.columns - 4) / self.file_manager.total_files))
             top_bar.append(
                     CursesPixel(text='|' if ioi else '_', 
                                 fg=-1, 
@@ -626,15 +656,10 @@ class Specgram(object):
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')  
     def create_channel_bar(self):
         self.validate_channel_count()
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
         top_bar = []
         bottom_bar = []
         chan_str = ' Channel: '
-        available_width = self.legend.columns - len(chan_str)
+        available_width = self.active_legend.columns - len(chan_str)
         top_bar.append(CursesPixel(text='\n{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=self.standout_color[0]))
         bottom_bar.append(CursesPixel(text=' ' * len(chan_str), fg=-1, attr=A_BOLD, bg=COLOR_BLACK))
         for i in range(self.available_channels):
@@ -656,11 +681,6 @@ class Specgram(object):
 
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__scroll_mode_bar__')
     def create_scroll_mode_bar(self):
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
         mode_bar = []
         if self.is_scroll_active:
             color = self.accent_color[1]
@@ -670,18 +690,13 @@ class Specgram(object):
             scroll_mode_text = 'OFF (shrunk-to-fit Spectrogram)'
 
         mode_bar.extend([
-                CursesPixel(text='Scroll Mode: {}'.format(scroll_mode_text).center(legend.columns), 
+                CursesPixel(text='Scroll Mode: {}'.format(scroll_mode_text).center(self.active_legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
         return(mode_bar)
 
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__plot_mode_bar__')
     def create_plot_mode_bar(self):
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
         mode_bar = []
         if self.ui.get_panel_mode() == 'Stacked':
             color = self.accent_color[1]
@@ -691,18 +706,13 @@ class Specgram(object):
             color = self.accent_color[2]
 
         mode_bar.extend([
-                CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(legend.columns), 
+                CursesPixel(text='Window Mode: {}'.format(self.ui.get_panel_mode()).center(self.active_legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
         return(mode_bar)
 
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__nav_mode_bar__')
     def create_nav_mode_bar(self):
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
         mode_bar = []
         if self.file_manager.state == 'Streaming':
             color = self.accent_color[0]
@@ -711,39 +721,34 @@ class Specgram(object):
         else:
             color = self.accent_color[2]
         mode_bar.extend([
-                CursesPixel(text='Nav Mode: {}'.format(self.file_manager.state).center(legend.columns), 
+                CursesPixel(text='Nav Mode: {}'.format(self.file_manager.state).center(self.active_legend.columns), 
                     fg=-1, bg=color, attr=A_BOLD),
             ])
         return(mode_bar)
 
     @handle_ui_element_cache(cache='cached_legend_elements', target_element='__intensity_bar__')
     def create_intensity_bar(self):
-        if self.mini_legend_mode:
-            legend = self.mini_legend
-        else:
-            legend = self.legend
-
         intensity_bar = []
         intensity_bar.extend([
-                CursesPixel(text='  Quietest'.ljust(int(legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text='Loudest  '.rjust(int(legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text='  Quietest'.ljust(int(self.active_legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text='Loudest  '.rjust(int(self.active_legend.columns / 2)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
             ])
         intensity_bar.extend([
-                CursesPixel(text=' ' * int(self.legend.columns / 5), fg=-1, bg=self.color[0], attr=A_BOLD),
-                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[1], attr=A_BOLD),
-                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[2], attr=A_BOLD),
-                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[3], attr=A_BOLD),
-                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[4], attr=A_BOLD),
-                CursesPixel(text=' ' * int(self.legend.columns / 6), fg=-1, bg=self.color[5], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.active_legend.columns / 5), fg=-1, bg=self.color[0], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.active_legend.columns / 6), fg=-1, bg=self.color[1], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.active_legend.columns / 6), fg=-1, bg=self.color[2], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.active_legend.columns / 6), fg=-1, bg=self.color[3], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.active_legend.columns / 6), fg=-1, bg=self.color[4], attr=A_BOLD),
+                CursesPixel(text=' ' * int(self.active_legend.columns / 6), fg=-1, bg=self.color[5], attr=A_BOLD),
                 CursesPixel(text=' ',                                fg=-1, bg=self.color[5], attr=A_BOLD),
             ])
         lower_bound = ' {}dB'.format(self.threshold_db - self.threshold_steps * 2)
         current_dB = '{}dB'.format(self.threshold_db)
         upper_bound = '{}dB '.format(self.threshold_db + self.threshold_steps * 2)
         intensity_bar.extend([
-                CursesPixel(text=lower_bound.ljust(int(legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text=current_dB.center(int(legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
-                CursesPixel(text=upper_bound.rjust(int(legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=lower_bound.ljust(int(self.active_legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=current_dB.center(int(self.active_legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
+                CursesPixel(text=upper_bound.rjust(int(self.active_legend.columns / 3)), fg=-1, bg=COLOR_BLACK, attr=A_BOLD),
             ])
         intensity_bar.extend([CursesPixel(text='', fg=-1, bg=COLOR_BLACK, attr=A_BOLD)])
         return(intensity_bar)
@@ -756,13 +761,7 @@ class Specgram(object):
         return(dt)
 
     def get_formatted_data_dir(self):
-        dir_str = str(self.file_manager.current_file.parent)
-        max_width = self.mini_legend.columns - 20\
-         if self.mini_legend_mode\
-          else self.legend.columns - 20
-
-        formatted_dir = dir_str[-(max_width):] + '/'
-        return('<<' + formatted_dir[formatted_dir.find('/') + 1:])
+        return(self.file_manager.get_truncated_data_dir(max_width=self.active_legend.columns - 20))
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')
     def cycle_channels(self, key):
@@ -783,14 +782,10 @@ class Specgram(object):
         self.full_screen_mode ^= True # toggle
 
         # Toggle correct legend for mode
-        if self.mini_legend_mode:
-            self.mini_legend.hide_all()\
-             if self.full_screen_mode\
-              else self.mini_legend.show_all()
+        if self.full_screen_mode:
+            self.active_legend.hide_all()
         else:
-            self.legend.hide_all()\
-             if self.full_screen_mode\
-              else self.legend.show_all()
+            self.active_legend.show_all()
 
         # Expand plot if in best fit mode
         if self.full_screen_mode:

@@ -83,6 +83,8 @@ class Ui(object):
         self.panels['flash_message'].set_basic_buffer()
         self.panels['flash_message'].hide()
 
+        self.shutdown_callbacks = []
+
     @property
     def main_window(self):
         return(self.panels['main'])
@@ -90,8 +92,8 @@ class Ui(object):
     def _init_cmd_map(self):
         self.cmd_map = {}
         self.register_cmd_callback(pattern='help', callback=[self.toggle_help])
-        self.register_cmd_callback(pattern='exit', callback=[self.stop, self._kill])
-        self.register_cmd_callback(pattern='quit', callback=[self.stop, self._kill])
+        self.register_cmd_callback(pattern='exit', callback=[self.stop])
+        self.register_cmd_callback(pattern='quit', callback=[self.stop])
 
     def _init_keymap(self):
         self.keymap = {}
@@ -101,7 +103,7 @@ class Ui(object):
                                                            case_sensitive=False))
         self.register_keystroke_callable(KeystrokeCallable(key_id=curses.KEY_DC,
                                                            key_name='DELETE',
-                                                           call=[self.log_keystroke, self.stop, self._kill],
+                                                           call=[self.log_keystroke, self.stop],
                                                            case_sensitive=True))
         self.register_keystroke_callable(KeystrokeCallable(key_id=curses.KEY_RESIZE,
                                                            key_name='RESIZE',
@@ -423,6 +425,9 @@ class Ui(object):
             self.log(traceback.format_exc())
             self.log('Current cursor position: y: {}, x: {}'.format(*self.main_window.window.getyx()))
 
+    def register_shutdown_callback(self, callback):
+        self.shutdown_callbacks.append(callback)
+
     def register_general_cmd_callback(self, callback=[]):
         if '__any__' not in self.cmd_map:
             self.cmd_map['__any__'] = []
@@ -460,6 +465,8 @@ class Ui(object):
 
     def stop(self, *args):
         self.shutdown = True
+        [call() for call in self.shutdown_callbacks]
+        self._kill()
 
     def run_async(self):
         self.running_async = True

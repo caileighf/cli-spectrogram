@@ -239,7 +239,7 @@ class FileNavManager(object):
     """
     def __init__(self, data_dir, file_name_pattern='1*.txt', skip_empty=False):
         super(FileNavManager, self).__init__()
-        self.data_dir = data_dir
+        self._init_data_dir(data_dir=data_dir)
         self.skip_empty = skip_empty
         self.shutdown = False
         self._state = 'Streaming'
@@ -248,6 +248,15 @@ class FileNavManager(object):
         self._thread = threading.Thread(target=self.run)
         self._thread.start()
         self._current_file = None
+
+    def _init_data_dir(self, data_dir):
+        if not isinstance(data_dir, pathlib.Path):
+            self.data_dir = pathlib.Path(data_dir)
+        if not self.data_dir.is_dir():
+            raise TypeError('''
+                Data directory passed is not a directory! 
+                If it is, check your permissions
+                ''')
 
     @property
     def current_file(self):
@@ -266,6 +275,16 @@ class FileNavManager(object):
     @property
     def current_position(self):
         return(self.cursor_pos)
+
+    def get_truncated_data_dir(self, max_width):
+        path = self.current_file.parent
+
+        if len(str(path)) < max_width:
+            if path.relative_to('./'):
+                return('./{}/'.format(path))
+            return('{}/'.format(path))
+        else:
+            return('>>{}/'.format(str(path)[-max_width:]))
     
     def is_empty(self, file):
         return(file.stat().st_size <= 0)
