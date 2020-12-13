@@ -77,7 +77,9 @@ class Specgram(object):
     def __init__(self, source,
                        ui,
                        device_name,
+                       is_piped=False,
                        legend_side=RIGHT,
+                       use_mini_legend=False,
                        display_channel=0, 
                        threshold_db=90, 
                        markfreq_hz=5000, 
@@ -89,6 +91,7 @@ class Specgram(object):
                        skip_empty=False):
         super(Specgram, self).__init__()
         self.ui = ui # ui instance for creating plot window and legend windows
+        self.is_piped = is_piped
         self.window = ui.new_full_size_window(name='specgram_plot')
         self.first_draw = True
         self.force_redraw = True
@@ -128,17 +131,35 @@ class Specgram(object):
         self.scroll_dn_step = 15
         self.scroll_top_min = 9
         self.scroll_line_index = {'top': 0, 'bottom': 0}
-        self.mini_legend_mode = False
-        self.cached_legend_elements = {}
 
-        self.full_screen_mode = False
         self._init_color(use_full_color)
-
+        self.cached_legend_elements = {}
+        self.mini_legend_mode = use_mini_legend
         self._init_keymap()
         self._init_cmd_map()
+
+        if self.is_piped:
+            self.mini_legend_mode = False
+            self.full_screen_mode = True
+        else:
+            self.full_screen_mode = False
+        
         self._init_legend(legend_side)
+        self._init_mini_legend()
         self._init_ui_help()
         self.handle_plot_state_change(event='INITIAL_RESIZE')
+
+    def _init_mini_legend(self):
+        self.mini_legend = self.ui.new_legend(name='specgram_mini_legend', 
+                                              num_panels=1, 
+                                              get_legend_dict=self.legend_data, 
+                                              type_=SINGLE_H, 
+                                              shared_dimension=50, 
+                                              side=TOP_RIGHT)
+        self.mini_legend.minimal_mode = True
+        self.mini_legend.footer = 'Show ALL keyboard shortcuts with ? or space'
+        if not self.mini_legend_mode:
+            self.mini_legend.hide_all()
 
     def _init_legend(self, legend_side):
         rows, _ = self.window.term_size
@@ -152,6 +173,8 @@ class Specgram(object):
         self.legend.footer = 'Show ALL keyboard shortcuts with ? or space'
         self.legend.set_x_label('Frequency (Hz)')
         self.legend.set_y_label('Time (relative to file start)')
+        if self.mini_legend_mode or self.full_screen_mode:
+            self.legend.hide_all()
 
     def _init_color(self, use_full_color):
         self.use_full_color = use_full_color
@@ -443,7 +466,6 @@ class Specgram(object):
                                                   side=TOP_RIGHT)
             self.mini_legend.minimal_mode = True
             self.mini_legend.footer = 'Show ALL keyboard shortcuts with ? or space'
-            self.ui.add_legend_manager(name='specgram_mini_legend', manager=self.mini_legend)
 
         if self.ui.get_panel_mode() == 'Best Fit':
             self.ui.toggle_overlap_mode()
@@ -811,6 +833,9 @@ class Specgram(object):
         self.window.refresh()
 
     def redraw_specgram(self, *args):
+        if self.is_piped:
+            self.auto_mark()
+
         if self.file_manager.next_file() == self.current_file:
             if self.first_draw:
                 self.first_draw = False

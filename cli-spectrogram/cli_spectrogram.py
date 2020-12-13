@@ -56,12 +56,16 @@ def main(stdscr, args):
     if args.use_config:
         args = handle_config(args)
 
-    ui = Ui(stdscr=stdscr, refresh_hz=0)#args.file_length)
+    ui = Ui(stdscr=stdscr, 
+            refresh_hz=args.file_length,
+            is_piped=args.piped)
     specgram = Specgram(source=args.source,
                         ui=ui,
                         display_channel=args.display_channel,
+                        is_piped=args.piped,
                         device_name=args.device_name,
                         legend_side=LEFT if not args.right_hand_legend else RIGHT,
+                        use_mini_legend=args.mini_legend,
                         threshold_db=args.threshold_db, 
                         markfreq_hz=args.markfreq_hz, 
                         threshold_steps=args.threshold_steps, 
@@ -157,6 +161,18 @@ if __name__ == '__main__':
                                 moved during operation and will \"stick\" to the opposite side if it
                                 travels all the way there.
                                 (Default: Left)''', 
+                        action='store_true', 
+                        required=False)
+    parser.add_argument('--mini-legend',
+                        help='''Start with the minimal legend of the Right side of the console. This can be
+                                moved during operation and will \"stick\" to the opposite side if it
+                                travels all the way there.
+                                (Default: Hidden minimal legend -- Shown full legend)''', 
+                        action='store_true', 
+                        required=False)
+    parser.add_argument('--piped',
+                        help='''For a non-interactive plot with no legends or i/o.
+                                (Default: False)''', 
                         action='store_true', 
                         required=False)
     parser.add_argument('--stacked-mode', 

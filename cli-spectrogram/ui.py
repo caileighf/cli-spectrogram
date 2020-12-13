@@ -52,10 +52,11 @@ class Ui(object):
 
     The Ui class manages all things related to curses and what is displayed
     """
-    def __init__(self, stdscr, refresh_hz=0, audio_bell=True):
+    def __init__(self, stdscr, is_piped=False, refresh_hz=0, audio_bell=True):
         super(Ui, self).__init__()
         init_color_pairs()
         init_mouse()
+        self.is_piped = is_piped
         self.running_async = False
         self.key_buffer = deque()
         self.base_window = stdscr
@@ -150,6 +151,9 @@ class Ui(object):
 
         self.default_msg_bar_text = ' Hit the space bar or ? to toggle the help window | Ctrl + c to quit '
         self.message_bar.print(self.default_msg_bar_text, post_clean=False)
+
+        if self.is_piped:
+            self.message_bar.hide()
 
         curses.panel.update_panels()
         curses.doupdate()
@@ -484,7 +488,8 @@ class Ui(object):
             self.spin()
 
     def spin(self):
-        self.message_bar.set_focus()
+        if not self.is_piped:
+            self.message_bar.set_focus()
 
         start = time.time()
         try:
