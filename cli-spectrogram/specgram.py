@@ -263,6 +263,9 @@ class Specgram(object):
                               key_name='S',
                               call=[self.toggle_scroll_mode],
                               case_sensitive=False),
+            KeystrokeCallable(key_id=ord('^'),
+                              key_name='^',
+                              call=[self.auto_mark],),
             KeystrokeCallable(key_id=KEY_UP,
                               key_name='Up',
                               call=[self.handle_plot_change]),
@@ -325,7 +328,7 @@ class Specgram(object):
                 'Spectrogram Information': {
                     'Threshold (dB)': self.threshold_db,
                     'Sample Rate (Hz)': self.sample_rate,
-                    'Max Freq': self.argmax_freq,
+                    'Max Freq': '{} Hz'.format(self.argmax_freq),
                     'NFFT': self.nfft,
                     'Vertical Axis': self.legend.y_label,
                     'Horizontal Axis': self.legend.x_label,
@@ -346,6 +349,7 @@ class Specgram(object):
                     'Up / Down': 'Adjust color threshold by +/-{}dB'.format(self.threshold_steps),
                     'Shift + (Up / Down)': 'Adjust NFFT by +/-{}'.format(self.nfft_step),
                     'Left / Right': 'Move mark frequency by +/-100Hz',
+                    '^': 'Move mark frequency to argmax of frequency',
                     'C / c': 'Cycle through channels',
                     'Pg Up / Pg Down': 'Previous file / Next file',
                     'A / a': 'Move backwards 60 seconds / 10 seconds',
@@ -356,7 +360,7 @@ class Specgram(object):
                     '__hline01__': self.legend.hline(ch=' '),
                     'Shift + Left': 'Move legend left',
                     'Shift + Right': 'Move legend right',
-                    'H / h': 'Toggle keyboard shortcuts on / off',
+                    'H / h': 'Toggle full legend visibility',
                     'F / f': 'Toggle full screen on / off',
                     'G / g': 'Toggle grayscale / full color',
                     'R / r': 'Reverse color map',
@@ -371,7 +375,7 @@ class Specgram(object):
                     'Time': str(self.get_formatted_dt()),
                     'Threshold (dB)': self.threshold_db,
                     'Sample Rate (Hz)': self.sample_rate,
-                    'Max Freq': self.argmax_freq,
+                    'Max Freq': '{} Hz'.format(self.argmax_freq),
                     'NFFT': self.nfft,
                     '__dataset_position_marker__':
                         self.create_dataset_position_bar(),
@@ -416,6 +420,9 @@ class Specgram(object):
             return(self.legend_data()['LOWER']['Keyboard Shortcuts'])
         except KeyError:
             raise KeyError('Unable to get formatted keyboard shortcuts! Check legend keys')
+
+    def auto_mark(self, *args):
+        self.markfreq_hz = self.argmax_freq
 
     @invalidate_cache(cache='cached_legend_elements')
     def handle_minimal_mode(self, *args):
@@ -1007,6 +1014,11 @@ class Specgram(object):
         return(self.downsample_to_max(axis, self.window.columns), 
                self.downsample_to_max(rows, self.window.columns))
 
+    def calc_argmax_freq(self, frequency_vector):
+        freqs = numpy.fft.fftfreq(len(frequency_vector))
+        idx = numpy.argmax(numpy.abs(frequency_vector))
+        self.argmax_freq = int(abs(freqs[idx] * self.sample_rate))
+
     def create_specgram(self):
         done = False
         start = 0
@@ -1028,8 +1040,9 @@ class Specgram(object):
                     break
                 else:
                     raise ValueError('Values too low for threshold \n{}'.format(traceback.format_exc()))
-           
-            self.argmax_freq = frequency_db_vector.index(max(frequency_db_vector))
+            else:
+                self.calc_argmax_freq(frequency_vector)
+
             line=[]
             for f in frequency_db_vector:
                 if int(f) >= self.threshold_db:
