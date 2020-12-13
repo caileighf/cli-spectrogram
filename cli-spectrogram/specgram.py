@@ -144,6 +144,7 @@ class Specgram(object):
         self._init_ui_help()
         self.handle_plot_state_change(event='INITIAL_RESIZE')
         self.ui.register_shutdown_callback(self.shutdown)
+        # self._init_waterfall_buffer_thread()
 
     @property
     def active_legend(self):
@@ -151,20 +152,35 @@ class Specgram(object):
             return(self.mini_legend)
         return(self.legend)
 
-    def shutdown(self, *args):
+    def shutdown(self, *args, **kwargs):
         if hasattr(self, '_waterfall_buffer_thread'):
             self.stop_waterfall = True
             self._waterfall_buffer_thread.join()
 
-    def _init_buffer_thread(self):
+    def _init_waterfall_buffer_thread(self):
         # the waterfall buffer
         self.stop_waterfall = False
         self._waterfall_buffer_thread = threading.Thread(target=self.pop_waterfall_buffer)
         self._waterfall_buffer_thread.start()
 
-    def pop_waterfall_buffer(self):
+    def pop_waterfall_buffer(self, *args, **kwargs):
+        self.waterfall_data_buffer = WaterfallBuffer()
+        self.waterfall_display_buffer = WaterfallBuffer()
+        _current_file = self.file_manager.current_file
         while not self.stop_waterfall:
-            pass
+            _file = self.file_manager.current_file
+            if _current_file == _file:
+                continue
+            
+            # append new data to data buffer
+            _current_file = _file
+            with open(_current_file, 'r') as f:
+                for line in f.readlines():
+                    self.waterfall_data_buffer.append([float(token) for token in line.strip().split(',')])
+
+            # with data from data buffer create specgram row by row
+
+        exit()
 
     def _init_legend(self, legend_side, show=True):
         rows, _ = self.window.term_size
@@ -365,7 +381,7 @@ class Specgram(object):
                 'Spectrogram Information': {
                     'Threshold (dB)': self.threshold_db,
                     'Sample Rate (Hz)': self.sample_rate,
-                    'Max Freq': self.argmax_freq,
+                    'Max Freq': '{} Hz'.format(self.argmax_freq),
                     'NFFT': self.nfft,
                     'Vertical Axis': self.legend.y_label,
                     'Horizontal Axis': self.legend.x_label,
@@ -1002,6 +1018,11 @@ class Specgram(object):
         return(self.downsample_to_max(axis, self.window.columns), 
                self.downsample_to_max(rows, self.window.columns))
 
+    def calc_argmax_freq(self, frequency_vector):
+        freqs = numpy.fft.fftfreq(len(frequency_vector))
+        idx = numpy.argmax(numpy.abs(frequency_vector))
+        self.argmax_freq = int(abs(freqs[idx] * self.sample_rate))
+
     def create_specgram(self):
         done = False
         start = 0
@@ -1023,9 +1044,10 @@ class Specgram(object):
                     break
                 else:
                     raise ValueError('Values too low for threshold \n{}'.format(traceback.format_exc()))
+            else:
+                self.calc_argmax_freq(frequency_vector)
            
-            self.argmax_freq = frequency_db_vector.index(max(frequency_db_vector))
-            line=[]
+            line = []
             for f in frequency_db_vector:
                 if int(f) >= self.threshold_db:
                     if int(f) - self.threshold_db <= self.threshold_steps:       # closest to thresh

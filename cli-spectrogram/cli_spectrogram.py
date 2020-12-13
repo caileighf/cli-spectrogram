@@ -35,7 +35,7 @@ def run_cli(ui, specgram, do_run_async=False):
     if do_run_async:
         ui.run_async()
     else:
-        while True: 
+        while True:
             ui.spin()
 
 def handle_config(args):
@@ -78,6 +78,7 @@ def main(stdscr, args):
                 do_run_async=True)
     finally:
         specgram.close()
+        ui.stop()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''cli-spectrogram -- This tool was
