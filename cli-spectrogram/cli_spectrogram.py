@@ -72,7 +72,9 @@ def main(stdscr, args):
                         nfft=args.nfft,
                         sample_rate=args.sample_rate,
                         file_length=args.file_length,
-                        skip_empty=args.skip_empty)
+                        skip_empty=args.skip_empty,
+                        lines_in_header=args.lines_in_header,
+                        file_name_pattern=args.file_name_pattern)
     if not args.stacked_mode:
         ui.best_fit_mode()
 
@@ -108,6 +110,17 @@ if __name__ == '__main__':
                                 * this cannot be changed during operation.''', 
                         required=False, 
                         type=float)
+    parser.add_argument('--lines-in-header', 
+                        help='''For data files with a header, pass the # of lines to skip 
+                                before getting to the body of the data file.
+                                (Default: 0 -- No header)''', 
+                        required=False, 
+                        type=int)
+    parser.add_argument('--file-name-pattern', 
+                        help='''Pattern for data filenames. Wildcards are denoted with an asterisk *
+                                (Default: 1*.txt)''', 
+                        required=False, 
+                        type=str)
     parser.add_argument('--source', 
                         help='''Source directory with .txt files. 
                                 Compatible files will format voltage values in comma separated columns
@@ -127,12 +140,12 @@ if __name__ == '__main__':
                         type=int)
     parser.add_argument('-c','--display-channel', 
                         help='''Select the channel you want to start with.
-                                The current limit is 8 channels. The channels are zero indexed!
+                                The current limit is 16 channels. The channels are zero indexed!
                                 If you would like to look at the second channel you would pass \"-c 1\".
                                 (Default: 0)''', 
                         required=False, 
                         type=int, 
-                        choices=range(0, 8))
+                        choices=range(0, 17))
     parser.add_argument('--threshold-steps', 
                         help='''Starting threshold-steps will define the color intensity.
                                 (Default: 5dB)''', 
@@ -189,7 +202,8 @@ if __name__ == '__main__':
                         threshold_steps=5, 
                         nfft=240,
                         sample_rate=19200,
-                        file_length=1.0)
+                        file_length=1.0,
+                        lines_in_header=0)
     args = parser.parse_args()
 
     try:
