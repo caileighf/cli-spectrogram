@@ -88,9 +88,7 @@ class Specgram(object):
                        sample_rate=19200,
                        file_length=1.0,
                        use_full_color=True,
-                       skip_empty=False,
-                       lines_in_header=0,
-                       file_name_pattern='1*.txt'):
+                       skip_empty=False):
         super(Specgram, self).__init__()
         self.ui = ui # ui instance for creating plot window and legend windows
         self.is_piped = is_piped
@@ -122,10 +120,7 @@ class Specgram(object):
         self.argmax_freq = 0
 
         self.skip_empty = skip_empty
-        self.lines_in_header = lines_in_header
-        self.file_manager = FileNavManager(data_dir=self.source, 
-                                           skip_empty=skip_empty, 
-                                           file_name_pattern=file_name_pattern)
+        self.file_manager = FileNavManager(data_dir=self.source, skip_empty=skip_empty)
         self.current_file = self.file_manager.next_file()
         self.device_name = device_name
         self.data = []
@@ -551,7 +546,6 @@ class Specgram(object):
             return int(-(rel_time - target_time).total_seconds())
         # raise ValueError('{}:{}:{}\n\ntotal delta sec: {}\n\n{}'.format(h, m, s, total_delta_sec, rel_time))
 
-    @invalidate_cache(cache='cached_legend_elements')
     def handle_cmd(self, **kwargs):
         if kwargs and 'key' in kwargs:
             key = kwargs['key']
@@ -672,26 +666,14 @@ class Specgram(object):
         available_width = self.legend.columns - len(chan_str)
         top_bar.append(CursesPixel(text='\n{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=self.standout_color[0]))
         bottom_bar.append(CursesPixel(text=' ' * len(chan_str), fg=-1, attr=A_BOLD, bg=COLOR_BLACK))
-        offset = 0
-        bottom_bar.append(
-                CursesPixel(text='{}'.format(' ').rjust(int(available_width / self.available_channels)), 
-                    fg=-1, attr=A_BOLD,
-                    bg=COLOR_BLACK),
-            )
         for i in range(self.available_channels):
-            if len(str(i)) > 1:
-                offset = 1
-
             top_bar.append(
-                    CursesPixel(text='{}'.format(i).rjust(int(available_width / self.available_channels) + offset), 
+                    CursesPixel(text='{}'.format(i).center(int(available_width / self.available_channels)), 
                         fg=-1, attr=A_BOLD,
                         bg=COLOR_BLACK if self.display_channel != i else self.standout_color[0]),
                 )
-            indicator = ' ' if self.display_channel != i else '^'
-            indicator = ' '*(offset) + indicator
-
             bottom_bar.append(
-                    CursesPixel(text='{}'.format(indicator).rjust(int(available_width / self.available_channels) + offset), 
+                    CursesPixel(text='{}'.format(' ' if self.display_channel != i else '^').center(int(available_width / self.available_channels)), 
                         fg=-1, attr=A_BOLD,
                         bg=COLOR_BLACK if self.display_channel != i else self.standout_color[1]),
                 )
@@ -813,13 +795,7 @@ class Specgram(object):
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')
     def cycle_channels(self, key):
-        ch_select = self.display_channel + 1
-
-        if ch_select >= self.available_channels:
-            self.display_channel = 0
-        else:
-            self.display_channel += 1
-
+        self.display_channel += 1
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__plot_mode_bar__')
     def handle_plot_state_change(self, event):
@@ -878,7 +854,7 @@ class Specgram(object):
 
     def validate_channel_count(self):
         with open(str(self.file_manager.next_file()), 'r') as f:
-            line = f.readlines()[self.lines_in_header:self.lines_in_header + 1][0]
+            line = f.readline()
             self.available_channels = len(line.strip().split(','))
             
         self.file_manager.move_to_end()
@@ -887,7 +863,7 @@ class Specgram(object):
         self.current_file = self.file_manager.next_file()
         data = []
         with open(str(self.current_file), 'r') as f:
-            for line in f.readlines()[self.lines_in_header:]:
+            for line in f.readlines():
                 channel_data = line.strip().split(',')
                 self.available_channels = len(channel_data)
                 if self.available_channels <= 0:
@@ -1024,7 +1000,7 @@ class Specgram(object):
 
         # append y-axis AND each row data to output buffer
         for row, row_data in enumerate(rows):
-            line = '0.{}| '.format(str(y_axis[row]).zfill(3)[:3])
+            line = '0.{}| '.format(str(y_axis[row]).zfill(3))
             formatted_row = [CursesPixel(text=ch, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_NORMAL) for ch in line]
             for col, color in enumerate(row_data):
                 if col != freq_marker_column:
@@ -1084,17 +1060,11 @@ class Specgram(object):
                 frequency_vector = numpy.fft.fft(data[start:start + self.nfft])
                 for x in frequency_vector[0:int(self.nfft / 2)]:
                     frequency_db_vector.append(20 * math.log(abs(x) / pow(10, -6), 10))
-            except ValueError as e:
+            except ValueError:
                 if len(data[start:start + self.nfft]) <= 0:
                     break
-                if str(e) == 'math domain error':
-                    # we tried to calc log of x when x <= 0
-                    pass
-            except IndexError as e:
-                # for numpy.fft.fft: if `axes` is larger than the last axis of `a`.
-                # we shouldn't have this exception since we don't pass the axis kwarg but in the future we may
-                # TODO: currently this will indicate to user that they should adjust the NFFT
-                raise ValueError('numpy.fft.fft: array shape issue')
+                else:
+                    raise ValueError('Values too low for threshold \n{}'.format(traceback.format_exc()))
             else:
                 self.calc_argmax_freq(frequency_vector)
 
