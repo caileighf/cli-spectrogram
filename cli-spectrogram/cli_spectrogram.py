@@ -67,7 +67,7 @@ def main(stdscr, args):
                         legend_side=LEFT if not args.right_hand_legend else RIGHT,
                         use_mini_legend=args.mini_legend,
                         threshold_db=args.threshold_db, 
-                        markfreq_hz=args.markfreq_hz, 
+                        markfreq_hz='auto' if args.markfreq_hz == -1 else args.markfreq_hz, 
                         threshold_steps=args.threshold_steps, 
                         nfft=args.nfft,
                         sample_rate=args.sample_rate,
@@ -84,11 +84,10 @@ def main(stdscr, args):
         specgram.close()
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='''cli-spectrogram -- This tool was
-                                                    created to facilitate viewing voltage data
-                                                    (in the original use-case, voltage data was
-                                                    collected from a hydrophone) 
-                                                    as a spectrogram in the command line.''')
+    parser = argparse.ArgumentParser(description='''cli-spectrogram -- Command Line Interface Spectrogram
+                                                    for plotting a spectrogram in the command line.
+                                                    The original use case was for viewing hydrophone
+                                                    data in real-time over an ssh connection. ''')
     parser.add_argument('--sample-rate', 
                         help='''Sample rate the data files were sampled at (in Hz)
                                 (Default: 19200.0Hz)
@@ -144,7 +143,7 @@ if __name__ == '__main__':
                         type=int)
     parser.add_argument('-m','--markfreq-hz', 
                         help='''Starting frequency to \"mark\" with a vertical line.
-                                (Default: 5,000Hz)''', 
+                                (Default: Auto, mark argmax of freq)''', 
                         required=False, 
                         type=int)
     parser.add_argument('--use-config', 
@@ -185,7 +184,7 @@ if __name__ == '__main__':
     parser.set_defaults(source=os.getcwd(), 
                         display_channel=0, 
                         threshold_db=85, 
-                        markfreq_hz=5000, 
+                        markfreq_hz=-1, 
                         threshold_steps=5, 
                         nfft=240,
                         sample_rate=19200,

@@ -82,8 +82,8 @@ class Specgram(object):
                        use_mini_legend=False,
                        display_channel=0, 
                        threshold_db=90, 
-                       markfreq_hz=5000, 
-                       threshold_steps=1, 
+                       markfreq_hz='auto', 
+                       threshold_steps=5, 
                        nfft=240,
                        sample_rate=19200,
                        file_length=1.0,
@@ -110,7 +110,8 @@ class Specgram(object):
         self.available_channels = display_channel + 1 # zero indexed channels
                                                       # we will update once we get a look at the data files
         self.threshold_db = threshold_db
-        self.markfreq_hz = markfreq_hz
+        self.use_auto_mark = True if markfreq_hz == 'auto' else False
+        self.markfreq_hz = 0.0 if markfreq_hz == 'auto' else markfreq_hz
         self.markfreq_char = '|'
         self.threshold_steps = threshold_steps
         self.nfft = nfft
@@ -446,6 +447,7 @@ class Specgram(object):
 
     def auto_mark(self, *args):
         self.markfreq_hz = self.argmax_freq
+        self.use_auto_mark = True
 
     @invalidate_cache(cache='cached_legend_elements')
     def handle_minimal_mode(self, *args):
@@ -490,6 +492,7 @@ class Specgram(object):
     def handle_plot_change(self, key):
         start = time.time()
         if key.key_id == KEY_LEFT or key.key_id == KEY_RIGHT:
+            self.use_auto_mark = False
             if key.key_id == KEY_RIGHT:
                 self.markfreq_hz += 100
             else:
@@ -795,7 +798,11 @@ class Specgram(object):
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')
     def cycle_channels(self, key):
-        self.display_channel += 1
+        self.display_channel += 1 
+        if self.display_channel < self.available_channels - 1:
+            self.display_channel += 1 
+        else:
+            self.display_channel = 0
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__plot_mode_bar__')
     def handle_plot_state_change(self, event):
@@ -833,7 +840,7 @@ class Specgram(object):
         self.window.refresh()
 
     def redraw_specgram(self, *args):
-        if self.is_piped:
+        if self.is_piped or self.use_auto_mark:
             self.auto_mark()
 
         if self.file_manager.next_file() == self.current_file:
