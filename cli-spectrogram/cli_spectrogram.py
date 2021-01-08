@@ -60,6 +60,8 @@ def main(stdscr, args):
             refresh_hz=args.file_length,
             is_piped=args.piped)
     specgram = Specgram(source=args.source,
+                        file_pattern=args.filename_pattern,
+                        header_length=args.header_length,
                         ui=ui,
                         display_channel=args.display_channel,
                         is_piped=args.piped,
@@ -100,6 +102,17 @@ if __name__ == '__main__':
                                 * this cannot be changed during operation.''',    
                         default=None, 
                         type=str)
+    parser.add_argument('--filename-pattern', 
+                        help='''Pattern for glob to find data files in source directory
+                                Wild cards are denotes by \"*\" (Default: 1*.txt)
+                                * this cannot be changed during operation.''',    
+                        default='1*.txt', 
+                        type=str)
+    parser.add_argument('--header-length', 
+                        help='''Length of header in data files (Default: 0)
+                                * this cannot be changed during operation.''',    
+                        default=0, 
+                        type=int)
     parser.add_argument('--file-length', 
                         help='''Describes the file length in seconds.
                                 If you have a sample-rate of 100.0Hz and a file-length of 1.0 seconds,

@@ -13,15 +13,56 @@
 # File: common.py
 #
 from __future__ import print_function
-from collections import namedtuple
+from collections import namedtuple, deque
 import os, sys, time
 import threading
 import pathlib
 import curses
 import traceback
 
+class NoFilesMatchingPattern(Exception):
+    """docstring for NoFilesMatchingPattern"""
+    def __init__(self, message="No files matching pattern"):
+        self.message = message
+        super(NoFilesMatchingPattern, self).__init__(self.message)
+
+class EmptyDataFile(Exception):
+    """docstring for EmptyDataFile"""
+    def __init__(self, message="Empty data file"):
+        self.message = message
+        super(EmptyDataFile, self).__init__(self.message)
+
+class NFFT2Low(Exception):
+    """docstring for NFFT2Low"""
+    def __init__(self, message="NFFT too low"):
+        self.message = message
+        super(NFFT2Low, self).__init__(self.message)
+
+
 default_bg = curses.COLOR_BLACK
 default_emphasis = curses.A_NORMAL
+
+# VALID_CURSES_EMPHASIS = dict(
+#     alt_char=curses.A_ALTCHARSET, # Alternate character set mode
+#     blink=curses.A_BLINK, # Blink mode
+#     bold=curses.A_BOLD      , # Bold mode
+#     alt_char=curses.A_DIM       , # Dim mode
+#     alt_char=curses.A_INVIS     , # Invisible or blank mode
+#     alt_char=curses.A_ITALIC    , # Italic mode
+#     alt_char=curses.A_NORMAL    , # Normal attribute
+#     alt_char=curses.A_PROTECT   , # Protected mode
+#     alt_char=curses.A_REVERSE   , # Reverse background and foreground colors
+#     alt_char=curses.A_STANDOUT  , # Standout mode
+#     alt_char=curses.A_UNDERLINE , # Underline mode
+#     alt_char=curses.A_HORIZONTAL, # Horizontal highlight
+#     alt_char=curses.A_LEFT      , # Left highlight
+#     alt_char=curses.A_LOW       , # Low highlight
+#     alt_char=curses.A_RIGHT     , # Right highlight
+#     alt_char=curses.A_TOP       , # Top highlight
+#     alt_char=curses.A_VERTICAL  , # Vertical highlight
+#     alt_char=curses.A_CHARTEXT  , # Bit-mask to extract a character
+# )
+
 ESC = 27
 SHIFT_UP = 337
 SHIFT_DOWN = 336
@@ -138,6 +179,160 @@ CursesPixel = namedtuple('CursesPixel', ['text', 'fg', 'bg', 'attr'])
 Line = namedtuple('Line', ['data', 'attr_mask'])
 
 is_python_2_7 = sys.version[0:3] == '2.7'
+
+# class CursesPixel(object):
+#     """docstring for CursesPixel
+    
+
+
+#     """
+#     def __init__(self, ch=' ', fg=curses.COLOR_BLACK, bg=curses.COLOR_BLACK, attr=curses.A_NORMAL):
+#         super(CursesPixel, self).__init__()
+#         self.ch = ch
+#         self.fg = self.resolve_color(fg)
+#         self.bg = self.resolve_color(bg)
+#         self.attr = self.resolve_attr(attr)
+
+#     def resolve_color(self, color):
+#         if isinstance(color, int):
+#             if color >= 0 and color < 255:
+#                 return(color)
+#             raise ValueError('Invalid color param. Color # must fall between (0, 255]')
+
+#         elif color.lower() == 'black':
+#             return(curses.COLOR_BLACK)
+#         elif color.lower() == 'blue':
+#             return(curses.COLOR_BLUE)
+#         elif color.lower() == 'cyan':
+#             return(curses.COLOR_CYAN)
+#         elif color.lower() == 'green':
+#             return(curses.COLOR_GREEN)
+#         elif color.lower() == 'yellow':
+#             return(curses.COLOR_YELLOW)
+#         elif color.lower() == 'magenta':
+#             return(curses.COLOR_MAGENTA)
+#         elif color.lower() == 'red':
+#             return(curses.COLOR_RED)
+#         else:
+#             return(curses.COLOR_BLACK)
+
+
+#     def resolve_attr(self, attr):
+#         if isinstance(attr, int):
+#             if attr in VALID_CURSES_EMPHASIS:
+#                 return(attr)
+#             raise ValueError('Invalid emphasis')
+
+#         elif color.lower() == 'bold':
+#             return(curses.A_BOLD)
+#         elif color.lower() == 'italic':
+#             return(curses.)
+#         elif color.lower() == 'cyan':
+#             return(curses.COLOR_CYAN)
+#         elif color.lower() == 'green':
+#             return(curses.COLOR_GREEN)
+#         elif color.lower() == 'yellow':
+#             return(curses.COLOR_YELLOW)
+#         elif color.lower() == 'magenta':
+#             return(curses.COLOR_MAGENTA)
+#         elif color.lower() == 'red':
+#             return(curses.COLOR_RED)
+#         else:
+#             return(curses.COLOR_BLACK)
+
+#     def append(self, ch):
+#         self.ch += ch
+
+#     def copy(self):
+#         return(CursesPixel(ch=self.ch, 
+#                            fg=self.fg, 
+#                            bg=self.bg, 
+#                            attr=self.attr))
+
+#     def __repr__(self):
+#         return('CursesPixel(ch=%r, fg=%r, bg=%r, attr=%r)'
+#                 % (self.ch, self.fg, self.bg, self.attr))
+
+#     def __and__(self, other):
+#         if self.fg == other.fg and\
+#             self.bg == other.bg and\
+#             self.attr == other.attr:
+#             return(True)
+#         return(False)
+
+#     def __or__(self, other):
+#         return(not self.__and__(other))
+
+#     def __eq__(self, other):
+#         if self.fg == other.fg and\
+#             self.bg == other.bg and\
+#             self.attr == other.attr and\
+#             self.ch == other.ch:
+#             return(True)
+#         return(False)
+
+#     def __ne__(self, other):
+#         return(not self.__eq__(other))
+
+
+# class CursesPixelBuffer(object):
+#     """docstring for CursesPixelBuffer"""
+#     def __init__(self, buf=None, max_rows=5000):
+#         super(CursesPixelBuffer, self).__init__()
+#         # buf is a 2D matrix of Curses pixels
+#         self.max_rows = max_rows
+#         self.buf = deque(maxlen=self.max_rows)
+
+#         if buf != None:
+#             try:
+#                 [self.append_row(row) for row in buf]
+#             except (AttributeError, ValueError):
+#                 self.buf = deque(maxlen=self.max_rows)
+
+#     def __repr__(self):
+#         return('CursesPixelBuffer(buf=%r, max_rows=%r)'
+#             % (self.buf, self.max_rows))
+
+#     def _optimize(self, row):
+#         row = iter(row)
+#         prev_element = next(row)
+#         result = []
+
+#         for element in row:
+#             if element & prev_element:
+#                 prev_element.append(element.ch)
+#             else:
+#                 result.append(prev_element)
+#                 prev_element = element
+#         result.append(prev_element)
+#         return(result)
+
+#     def append_row(self, row):
+#         # make sure not empty list
+#         if row == []: 
+#             raise AttributeError('Row cannot be an empty list')
+#         # make sure all elements are CursesPixels
+#         elif not all(isinstance(element, CursesPixel) for element in row):
+#             raise ValueError('Row must be a row of CursesPixels')
+
+#         # to optimize printing combine CursesPixels that share attributes
+#         # .. which translates to 1 print call per block of chars with same colors/attrs
+#         optimized_row = self._optimize(row=row)
+#         self.buf.append(optimized_row)
+            
+
+# buf = CursesPixelBuffer()
+# row = [
+#     CursesPixel(ch='abc', attr=curses.A_BOLD),
+#     CursesPixel(ch='def', attr=curses.A_BOLD),
+#     CursesPixel(ch='ghi'),
+#     CursesPixel(ch='jkl'),
+#     CursesPixel(ch='mno', attr=curses.A_BOLD),
+#     CursesPixel(ch='pqr'),
+#     ]
+# buf.append_row(row=row)
+# print(buf)
+
 
 def accumulate(x, l=[0]): l[0] += x; return l[0];
 
@@ -346,4 +541,3 @@ class Cursor(object):
         except StopIteration:
             self.iter_y = iter(range(self.min_rows, self.max_rows - 1, self.step))
             return(next(self.iter_y))
-        

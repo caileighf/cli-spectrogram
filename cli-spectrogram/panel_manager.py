@@ -250,8 +250,7 @@ class LegendManager(object):
 
         if self.footer != None:
             self.panels[0].buffer.append(self.panels[0].hline(ch=' '))
-            self.panels[0].buffer.append(self.panels[0].hline(ch='?'))
-            self.panels[0].buffer.append([CursesPixel(text='{}'.format(self.footer.center(self.panels[0].columns)), fg=-1, bg=curses.COLOR_BLACK, attr=curses.A_BOLD),])
+            self.panels[0].buffer.append([CursesPixel(text='{}'.format(self.footer.center(self.panels[0].columns)), fg=-1, bg=curses.COLOR_BLACK, attr=(curses.A_BOLD | curses.A_REVERSE)),])
 
 def handle_exit_input(key):
     if key == curses.ascii.NL or key == 10:

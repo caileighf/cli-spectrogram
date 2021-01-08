@@ -42,6 +42,11 @@ from common import (
         full_color_accent,
         grayscale_color_accent
     )
+from common import (
+        NoFilesMatchingPattern,
+        EmptyDataFile,
+        NFFT2Low
+    )
 import sys, time
 import numpy
 import math
@@ -77,6 +82,8 @@ class Specgram(object):
     def __init__(self, source,
                        ui,
                        device_name,
+                       file_pattern='1*.txt',
+                       header_length=0,
                        is_piped=False,
                        legend_side=RIGHT,
                        use_mini_legend=False,
@@ -121,7 +128,11 @@ class Specgram(object):
         self.argmax_freq = 0
 
         self.skip_empty = skip_empty
-        self.file_manager = FileNavManager(data_dir=self.source, skip_empty=skip_empty)
+        self.file_pattern = file_pattern
+        self.header_length = header_length
+        self.file_manager = FileNavManager(data_dir=self.source, 
+                                           file_name_pattern=self.file_pattern, 
+                                           skip_empty=skip_empty)
         self.current_file = self.file_manager.next_file()
         self.device_name = device_name
         self.data = []
@@ -666,7 +677,7 @@ class Specgram(object):
         top_bar = []
         bottom_bar = []
         chan_str = ' Channel: '
-        available_width = self.legend.columns - len(chan_str)
+        available_width = legend.columns - len(chan_str)
         top_bar.append(CursesPixel(text='\n{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=self.standout_color[0]))
         bottom_bar.append(CursesPixel(text=' ' * len(chan_str), fg=-1, attr=A_BOLD, bg=COLOR_BLACK))
         for i in range(self.available_channels):
@@ -798,7 +809,6 @@ class Specgram(object):
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')
     def cycle_channels(self, key):
-        self.display_channel += 1 
         if self.display_channel < self.available_channels - 1:
             self.display_channel += 1 
         else:
@@ -860,21 +870,27 @@ class Specgram(object):
                 self.window.buffer.append(row)
 
     def validate_channel_count(self):
-        with open(str(self.file_manager.next_file()), 'r') as f:
-            line = f.readline()
-            self.available_channels = len(line.strip().split(','))
-            
-        self.file_manager.move_to_end()
+        try:
+            with open(str(self.file_manager.next_file()), 'r') as f:
+                line = f.readlines()[self.header_length + 1]
+                self.available_channels = len(line.strip().split(','))
+        except FileNotFoundError:
+            self.available_channels = 1
+        else:
+            self.file_manager.move_to_end()
 
     def get_data(self):
         self.current_file = self.file_manager.next_file()
         data = []
         with open(str(self.current_file), 'r') as f:
-            for line in f.readlines():
+            for i, line in enumerate(f.readlines()):
+                if i < self.header_length:
+                    continue
+
                 channel_data = line.strip().split(',')
                 self.available_channels = len(channel_data)
                 if self.available_channels <= 0:
-                    raise ValueError('Data file is empty!')
+                    raise EmptyDataFile()
                 elif self.available_channels <= self.display_channel:
                     self.display_channel = 0
                 data.append(float(channel_data[self.display_channel]))
@@ -898,8 +914,11 @@ class Specgram(object):
 
     def get_time_data(self, axis):
         time_vector = []
-        for t in axis:
-            time_vector.append(int(float(t) / self.sample_rate * 1000))
+        with open('axis.txt', 'a+') as f:
+            f.write('\nNext plot:\n===========\n')
+            for i, t in enumerate(axis):
+                time_vector.append(int(float(t) / self.sample_rate * 1000))
+                f.write('[{}]: Time: {}, Formatted: {}\n'.format(i, t, time_vector[-1]))
         return(time_vector)
 
     def format_x_axis(self, freq_marker_column):
@@ -964,23 +983,35 @@ class Specgram(object):
             self.current_axis = axis
             self.current_rows = rows
             if len(rows) <= 0:
-                # TODO: handle this better...
-                raise ZeroDivisionError('Empty data file')
+                raise EmptyDataFile()
 
             if shrink_to_fit:
                 axis, rows = self.fit_data(axis, rows)
 
-        except ValueError:
+        except NFFT2Low:
             # TODO handle values too low error with popup error
             self.ui.flash_message(output=['NFFT set TOO LOW!',
                                           'nfft: {}'.format(self.nfft)], 
                                   duration_sec=1.5,
                                   flash_screen=False)
             return([])
-        except ZeroDivisionError:
+        except EmptyDataFile:
             self.log('Found empty data file!')
             error_text = [
                 'THIS DATA FILE IS EMPTY!'.center(self.window.columns),
+                'You are seeing this messages because the default behavior-'.center(self.window.columns),
+                '-is to show these gaps. To skip empty files, pass --skip-empty'.center(self.window.columns),
+                ]
+            formatted_data.append(self.window.hline(ch=' '))
+            formatted_data.append([CursesPixel(text=error_text[0], fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_BOLD | A_BLINK)])
+            for line in error_text[1:]:
+                formatted_data.append([CursesPixel(text=line, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_BOLD)])
+            return(formatted_data)
+
+        except NoFilesMatchingPattern:
+            self.log('No files found matching pattern')
+            error_text = [
+                'No data files found matching pattern: {}'.format().center(self.window.columns),
                 'You are seeing this messages because the default behavior-'.center(self.window.columns),
                 '-is to show these gaps. To skip empty files, pass --skip-empty'.center(self.window.columns),
                 ]
@@ -1005,9 +1036,12 @@ class Specgram(object):
         formatted_data.append(formatted_info_line)
         formatted_data.append(formatted_border_line)
 
+        # start_t = 0.00
         # append y-axis AND each row data to output buffer
         for row, row_data in enumerate(rows):
             line = '0.{}| '.format(str(y_axis[row]).zfill(3))
+            # line = '{:06.3f}| '.format(start_t)
+            # start_t += self.file_length_sec / self.sample_rate
             formatted_row = [CursesPixel(text=ch, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_NORMAL) for ch in line]
             for col, color in enumerate(row_data):
                 if col != freq_marker_column:
@@ -1054,10 +1088,7 @@ class Specgram(object):
     def create_specgram(self):
         done = False
         start = 0
-        try:
-            data = self.get_data()
-        except IOError:
-            data = [0.0]
+        data = self.get_data()
 
         rows = []
         time_vector = []
@@ -1071,7 +1102,7 @@ class Specgram(object):
                 if len(data[start:start + self.nfft]) <= 0:
                     break
                 else:
-                    raise ValueError('Values too low for threshold \n{}'.format(traceback.format_exc()))
+                    raise NFFT2Low()
             else:
                 self.calc_argmax_freq(frequency_vector)
 

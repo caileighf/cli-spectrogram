@@ -149,7 +149,7 @@ class Ui(object):
         self.message_bar.border()
         self.message_bar.set_basic_buffer()
 
-        self.default_msg_bar_text = ' Hit the space bar or ? to toggle the help window | Ctrl + c to quit '
+        self.default_msg_bar_text = ' Hit the space bar or ? to toggle the help window | Ctrl + c to quit | ESC to enter command mode '
         self.message_bar.print(self.default_msg_bar_text, post_clean=False)
 
         if self.is_piped:
