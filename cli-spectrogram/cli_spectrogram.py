@@ -139,12 +139,12 @@ if __name__ == '__main__':
                         type=int)
     parser.add_argument('-c','--display-channel', 
                         help='''Select the channel you want to start with.
-                                The current limit is 8 channels. The channels are zero indexed!
+                                The current limit is 32 channels. The channels are zero indexed!
                                 If you would like to look at the second channel you would pass \"-c 1\".
                                 (Default: 0)''', 
                         required=False, 
                         type=int, 
-                        choices=range(0, 8))
+                        choices=range(0, 31))
     parser.add_argument('--threshold-steps', 
                         help='''Starting threshold-steps will define the color intensity.
                                 (Default: 5dB)''', 

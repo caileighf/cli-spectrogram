@@ -110,7 +110,7 @@ class Specgram(object):
         self.max_rows = self.window.rows
         self.max_columns = self.window.columns
         self.vertical_axis_width = 8    # 8 characters for the vertical axis
-        self.horizontal_axis_height = 6 # 6 characters for the horizontal axis 
+        self.horizontal_axis_height = 8 # 8 characters for the horizontal axis 
 
         self.source = source
         self.display_channel = display_channel
@@ -551,14 +551,10 @@ class Specgram(object):
                                                 time=datetime.time(hour=int(h),
                                                                    minute=int(m),
                                                                    second=int(s)))
-
-        # raise ValueError('{}:{}:{}\n\ntotal delta sec: {}\nrel_t: {}\ntarg_t: {}\n'.format(h, m, s, 
-        #      (rel_time - target_time).total_seconds(), rel_time, target_time))
         if rel_time > target_time:
             return int((rel_time - target_time).total_seconds())
         elif rel_time < target_time:
             return int(-(rel_time - target_time).total_seconds())
-        # raise ValueError('{}:{}:{}\n\ntotal delta sec: {}\n\n{}'.format(h, m, s, total_delta_sec, rel_time))
 
     def handle_cmd(self, **kwargs):
         if kwargs and 'key' in kwargs:
@@ -666,7 +662,63 @@ class Specgram(object):
         dataset_pos_bar.extend(bottom_bar)
         return(dataset_pos_bar)
 
-    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')  
+    def get_displayed_channel_range(self, available_width):
+        # Channel: 0  1  2  3  4  5  6  7  8  9  10...  * 11 channels max with end ellipse
+        # Channel: ...10 11 12 13 14 15 16 17 18 19...  * 10 with ellipse on both sides
+        # Channel: ...19 20 21 22 23 24 25 26 27 28...  * 10 with ellipse on both sides
+        # Channel: ...21 22 23 24 25 26 27 28 29 30 31  * 11 channels max with start ellipse
+
+        # Channel: 0  1  2  3  4  5  6  7  8  9  10 11  * 12 channels max with NO ellipse
+        full_chan_range = [i for i in range(self.available_channels)]
+        if self.available_channels <= 12:
+            # no ellipse we can display full range
+            chan_range = ['{}'.format(ch).center(int(available_width / self.available_channels)) for ch in full_chan_range]
+            chan_range[-1] = chan_range[-1].rstrip() # strip trailing ws
+            return(chan_range)
+
+        chan_range = []
+        need_leading_ellipse = self.display_channel > 10
+        need_trailing_ellipse = self.available_channels >= 13
+
+        start = 0
+        end = self.available_channels
+        num_elements = 10 # for ellipse on BOTH sides
+        if need_trailing_ellipse:
+            if self.display_channel <= 10:
+                end = 11
+            elif self.display_channel <= 17:
+                end = 18
+            elif self.display_channel <= 24:
+                end = 25
+        else:
+            num_elements += 1
+
+        if need_leading_ellipse:
+            if self.display_channel > 24:
+                start = 24
+            elif self.display_channel > 17:
+                start = 17
+            elif self.display_channel > 10:
+                start = 10
+        else:
+            num_elements += 1
+
+
+        for ch in full_chan_range[start:end]:
+            chan_range.append('{}'.format(ch).center(int(available_width / num_elements)))
+
+        # now insert ellipses
+        if need_leading_ellipse:
+            chan_range[0] = chan_range[0].lstrip() # strips leading ws
+            chan_range.insert(0, '...')
+        if need_trailing_ellipse and int(chan_range[-1]) != self.available_channels - 1:
+            chan_range[-1] = chan_range[-1].rstrip() # strips trailing ws
+            chan_range.append('...')
+
+        return(chan_range)
+
+
+    @handle_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__') 
     def create_channel_bar(self):
         self.validate_channel_count()
         if self.mini_legend_mode:
@@ -677,20 +729,36 @@ class Specgram(object):
         top_bar = []
         bottom_bar = []
         chan_str = ' Channel: '
-        available_width = legend.columns - len(chan_str)
+        available_width = legend.columns - len(chan_str) + 1
         top_bar.append(CursesPixel(text='\n{}'.format(chan_str), fg=-1, attr=A_BOLD, bg=self.standout_color[0]))
-        bottom_bar.append(CursesPixel(text=' ' * len(chan_str), fg=-1, attr=A_BOLD, bg=COLOR_BLACK))
-        for i in range(self.available_channels):
-            top_bar.append(
-                    CursesPixel(text='{}'.format(i).center(int(available_width / self.available_channels)), 
-                        fg=-1, attr=A_BOLD,
-                        bg=COLOR_BLACK if self.display_channel != i else self.standout_color[0]),
-                )
-            bottom_bar.append(
-                    CursesPixel(text='{}'.format(' ' if self.display_channel != i else '^').center(int(available_width / self.available_channels)), 
-                        fg=-1, attr=A_BOLD,
-                        bg=COLOR_BLACK if self.display_channel != i else self.standout_color[1]),
-                )
+
+        chan_range_position_text = ' {}/{}'.format(self.display_channel, self.available_channels - 1).center(len(chan_str))
+        bottom_bar.append(CursesPixel(text='\n{}'.format(chan_range_position_text), fg=-1, attr=(A_BOLD | A_REVERSE), bg=COLOR_BLACK))
+
+        chan_range = self.get_displayed_channel_range(available_width)
+        for elem in chan_range:
+            if '...' in elem:
+                top_bar.append(
+                        CursesPixel(text=elem, 
+                            fg=-1, attr=A_BOLD,
+                            bg=COLOR_BLACK),
+                    )
+                bottom_bar.append(
+                        CursesPixel(text=' ' * len(elem),
+                            fg=-1, attr=A_BOLD,
+                            bg=COLOR_BLACK),
+                    )
+            else:
+                top_bar.append(
+                        CursesPixel(text=elem, 
+                            fg=-1, attr=A_BOLD,
+                            bg=COLOR_BLACK if self.display_channel != int(elem) else self.standout_color[0]),
+                    )
+                bottom_bar.append(
+                        CursesPixel(text='{}'.format(' ' * len(elem) if self.display_channel != int(elem) else '^').center(int(available_width / len(chan_range))), 
+                            fg=-1, attr=A_BOLD,
+                            bg=COLOR_BLACK if self.display_channel != int(elem) else self.standout_color[1]),
+                    )
 
         channel_bar = []
         channel_bar.extend(top_bar)
@@ -809,10 +877,16 @@ class Specgram(object):
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__channel_bar__')
     def cycle_channels(self, key):
-        if self.display_channel < self.available_channels - 1:
-            self.display_channel += 1 
+        if key.key_name.isupper():
+            if self.display_channel > 0:
+                self.display_channel -= 1
+            else:
+                self.display_channel = self.available_channels - 1
         else:
-            self.display_channel = 0
+            if self.display_channel < self.available_channels - 1:
+                self.display_channel += 1 
+            else:
+                self.display_channel = 0
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__plot_mode_bar__')
     def handle_plot_state_change(self, event):
@@ -914,11 +988,11 @@ class Specgram(object):
 
     def get_time_data(self, axis):
         time_vector = []
-        with open('axis.txt', 'a+') as f:
-            f.write('\nNext plot:\n===========\n')
-            for i, t in enumerate(axis):
-                time_vector.append(int(float(t) / self.sample_rate * 1000))
-                f.write('[{}]: Time: {}, Formatted: {}\n'.format(i, t, time_vector[-1]))
+        # with open('axis.txt', 'a+') as f:
+        #     f.write('\nNext plot:\n===========\n')
+        for i, t in enumerate(axis):
+            time_vector.append(int(float(t) / self.sample_rate * 1000))
+                # f.write('[{}]: Time: {}, Formatted: {}\n'.format(i, t, time_vector[-1]))
         return(time_vector)
 
     def format_x_axis(self, freq_marker_column):
@@ -1039,7 +1113,8 @@ class Specgram(object):
         # start_t = 0.00
         # append y-axis AND each row data to output buffer
         for row, row_data in enumerate(rows):
-            line = '0.{}| '.format(str(y_axis[row]).zfill(3))
+            # line = '0.{}| '.format(str(y_axis[row]).zfill(3))
+            line = '{}/{}| '.format(row, len(rows))
             # line = '{:06.3f}| '.format(start_t)
             # start_t += self.file_length_sec / self.sample_rate
             formatted_row = [CursesPixel(text=ch, fg=COLOR_BLACK, bg=COLOR_BLACK, attr=A_NORMAL) for ch in line]
