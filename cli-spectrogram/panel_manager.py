@@ -302,6 +302,7 @@ class PanelManager(object):
         self.panel = panel
         self.border_on = border_on
         self.border_ch = None
+        self.footer = None
         self.corner = corner
         self.sticky_sides = sticky_sides
         # create empty buffer for data
@@ -547,6 +548,20 @@ class PanelManager(object):
             self.clean_window()
 
     def print_line(self, line, x, y, end='\n', center=False):
+        if isinstance(line, CursesPixel) or\
+           isinstance(line, list) and isinstance(line[0], CursesPixel):
+            for row in line:
+                try:
+                    for pixel in row:
+                        self.printch(ch=pixel.text, color=pixel.bg, attr=pixel.attr)
+                    self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
+                except AttributeError:
+                    pass
+                else:
+                    if self.border_on:
+                        self.add_border()
+                    return
+
         _, columns = get_term_size()
         try:
             if center:
@@ -555,6 +570,20 @@ class PanelManager(object):
                 self.window.addnstr(y, x, '{}{}'.format(line, end), columns-5)
         except curses.error:
             pass
+
+    def set_footer(self, footer_text):
+        self.footer = []
+        self.footer.append(self.hline(ch=' '))
+        self.footer.append([CursesPixel(text='{}'.format(footer_text.center(self.columns)), fg=-1, bg=curses.COLOR_BLACK, attr=(curses.A_BOLD | curses.A_REVERSE))],)
+
+    def print_footer(self):
+        if self.footer != None:
+            for row in self.footer:
+                for pixel in row:
+                    self.printch(ch=pixel.text, color=pixel.bg, attr=pixel.attr)
+                self.printch(ch='\n', color=curses.COLOR_BLACK, attr=curses.A_NORMAL)
+        if self.border_on:
+            self.add_border()
 
     def set_focus(self):
         self.panel.top()

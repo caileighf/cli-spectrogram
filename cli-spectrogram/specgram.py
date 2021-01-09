@@ -83,6 +83,7 @@ class Specgram(object):
                        ui,
                        device_name,
                        file_pattern='1*.txt',
+                       default_message_timeout=10,
                        header_length=0,
                        is_piped=False,
                        legend_side=RIGHT,
@@ -127,6 +128,8 @@ class Specgram(object):
         self.file_length_sec = file_length
         self.argmax_freq = 0
 
+        self.modal_index = 0
+        self.msg_timeout = default_message_timeout
         self.skip_empty = skip_empty
         self.file_pattern = file_pattern
         self.header_length = header_length
@@ -134,6 +137,7 @@ class Specgram(object):
                                            file_name_pattern=self.file_pattern, 
                                            skip_empty=skip_empty)
         self.current_file = self.file_manager.next_file()
+        self.timestamp_in_filename = self.get_formatted_dt() != None
         self.device_name = device_name
         self.data = []
         self.current_rows = []
@@ -229,7 +233,7 @@ class Specgram(object):
             self.log('scroll_line_index: top: {} bottom: {}'.format(self.scroll_line_index['top'], self.scroll_line_index['bottom']))
         else:
             self.ui.flash_message(output=['Switching scroll directions!'], 
-                                  duration_sec=1.5,
+                                  duration_sec=self.msg_timeout,
                                   flash_screen=False)
 
     def scroll(self, lines):
@@ -488,7 +492,7 @@ class Specgram(object):
         self.handle_minimal_mode()
         if self.mini_legend_mode:
             self.ui.flash_message(output=['Minimal Legend Mode Active'], 
-                                  duration_sec=1.0,
+                                  duration_sec=self.msg_timeout,
                                   flash_screen=False)
 
     @invalidate_ui_element_cache(cache='cached_legend_elements', target_element='__dataset_position_marker__')
@@ -556,7 +560,42 @@ class Specgram(object):
         elif rel_time < target_time:
             return int(-(rel_time - target_time).total_seconds())
 
+    def explore_class_attrs(self, key, output):
+        if key == KEY_UP:
+            if self.modal_index > 0:
+                self.modal_index -= 1
+            else:
+                self.modal_index = 0
+        elif key == KEY_DOWN:
+            if self.modal_index < len(output) - 1:
+                self.modal_index += 1
+            else:
+                self.modal_index = len(output) - 1
+
+        return(False, self.get_formatted_class_attrs())
+
+    def get_formatted_class_attrs(self):
+        output = []
+        i = 0
+        for k, v in self.__dict__.items():
+            if '__' == k[0:2]:
+                continue
+
+            row = []
+            if i == self.modal_index:
+                row.append(CursesPixel(text='> {}:'.format(k), fg=-1, bg=COLOR_BLACK, attr=(A_BOLD | A_REVERSE)))
+                row.append(CursesPixel(text=' {}'.format(v), fg=-1, bg=COLOR_BLACK, attr=(A_BOLD | A_REVERSE)))
+            else:
+                row.append(CursesPixel(text='  {}:'.format(k), fg=-1, bg=COLOR_BLACK, attr=A_BOLD))
+                row.append(CursesPixel(text=' {}'.format(v), fg=-1, bg=COLOR_BLACK, attr=A_NORMAL))
+            i += 1
+            output.append(row)
+
+        return(output)
+
     def handle_cmd(self, **kwargs):
+        # extract kwargs for key (command)
+        #                and passed params
         if kwargs and 'key' in kwargs:
             key = kwargs['key']
             if 'val' in kwargs:
@@ -564,16 +603,22 @@ class Specgram(object):
             else:
                 val = None
         else:
+            # No command sent... should not happen
             self.ui.beep()
             return
 
         if key in self.__dict__:
             _type = type(self.__dict__[key])
             self.__dict__[key] = _type(val)
-        elif key == 'print' and val in self.__dict__:
-            self.ui.flash_message('{}: {}'.format(val, self.__dict__[val]),
-                                  flash_screen=False,
-                                  duration_sec=1.5)
+        elif key == 'print':
+            if val in self.__dict__:
+                self.ui.flash_message('{}: {}'.format(val, self.__dict__[val]),
+                                      flash_screen=False,
+                                      duration_sec=self.msg_timeout)
+            else:
+                self.modal_index = 0
+                self.ui.modal_message(output=self.get_formatted_class_attrs(),
+                                      callback=self.explore_class_attrs)
         elif 'begin' in key and val == None:
             self.handle_position_cache()
             cursor_pos = self.file_manager.move_to_beginning()
@@ -581,10 +626,34 @@ class Specgram(object):
             self.handle_position_cache()
             cursor_pos = self.file_manager.move_to_end()
         elif 'goto' == key and val != None:
+            if not self.timestamp_in_filename:
+                # flash message to user so they understand why we can't jump to time
+                self.ui.flash_message(output=[
+                                        'Unable to use \"goto\" command!',
+                                        'Only filenames that are a pure Unix epoch-',
+                                        '-can be properly parsed!',
+                                        '',
+                                        '* filenames with a Unix epoch plus additional-',
+                                        '-chars will not parse correctly either *',
+                                      ], 
+                                      duration_sec=self.msg_timeout, 
+                                      flash_screen=True)
+                return
+
             self.handle_position_cache()
             _time = val.split(':')
             total_delta_sec = self.goto(*_time)
             self.file_manager.move_cursor(delta=-int(total_delta_sec / self.file_length_sec))
+        else:
+            # flash message to user so they understand why we can't jump to time
+            self.ui.flash_message(output=[
+                                    'Unknown command:    \"{}\"'.format(key),
+                                    'Unknown parameters: \"{}\"'.format(val),
+                                  ], 
+                                  duration_sec=None, 
+                                  flash_screen=True)
+            return
+
 
     def handle_navigation(self, key):
         start = time.time()
@@ -1066,7 +1135,7 @@ class Specgram(object):
             # TODO handle values too low error with popup error
             self.ui.flash_message(output=['NFFT set TOO LOW!',
                                           'nfft: {}'.format(self.nfft)], 
-                                  duration_sec=1.5,
+                                  duration_sec=self.msg_timeout,
                                   flash_screen=False)
             return([])
         except EmptyDataFile:

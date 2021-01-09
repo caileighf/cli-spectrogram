@@ -144,7 +144,7 @@ if __name__ == '__main__':
                                 (Default: 0)''', 
                         required=False, 
                         type=int, 
-                        choices=range(0, 31))
+                        choices=range(0, 32))
     parser.add_argument('--threshold-steps', 
                         help='''Starting threshold-steps will define the color intensity.
                                 (Default: 5dB)''', 

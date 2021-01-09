@@ -75,14 +75,23 @@ class Ui(object):
         self._init_cmd_map()
         self._overlap_mode = True # panels overlap and are not "fitted" together
         self._original_panel_mode = self.get_panel_mode()
+        self.modal_window_has_focus = False
         # set base window to nodelay so getch will be non-blocking
         self.base_window.nodelay(True)
         curses.curs_set(False)
         # create flash message window
         self.new_center_window(rows=10, columns=50, name='flash_message')
+        self.panels['flash_message'].set_footer('Hit ANY key to exit')
         self.panels['flash_message'].border()
         self.panels['flash_message'].set_basic_buffer()
         self.panels['flash_message'].hide()
+        # create modal message window
+        height, _ = get_term_size()
+        self.new_center_window(rows=(height - 8), columns=80, name='modal_window')
+        self.panels['modal_window'].set_footer('Exit: ESC | Select: ENTER')
+        self.panels['modal_window'].border()
+        self.panels['modal_window'].set_basic_buffer()
+        self.panels['modal_window'].hide()
 
     @property
     def main_window(self):
@@ -120,6 +129,8 @@ class Ui(object):
                                                            key_name='?',
                                                            call=[self.toggle_help],
                                                            case_sensitive=True))
+
+        self.forward_keys_in_modal = [curses.KEY_RESIZE, curses.KEY_DC]
 
     def _init_help(self):
         self.help_info = {
@@ -178,7 +189,7 @@ class Ui(object):
             key = '__any__'
 
         if len(args) > 1:
-            [call(key=args[0], val=args[-1]) for call in self.cmd_map[key]]
+            [call(key=args[0], val=args[1]) for call in self.cmd_map[key]]
         else:
             [call(key=args[0]) for call in self.cmd_map[key]]
 
@@ -357,19 +368,84 @@ class Ui(object):
         if flash_screen:
             curses.flash()
 
-        # self.panels['flash_message'].clear()
+        self.panels['flash_message'].clear()
         self.panels['flash_message'].show()
         self.panels['flash_message'].set_focus()
+        curses.panel.update_panels()
+        curses.doupdate()
 
         if not isinstance(output, list): output = [output]
         for i, line in enumerate(output):
             self.panels['flash_message'].print_line(line, 2, i+1, end='', center=True)
+        self.panels['flash_message'].print_footer()
 
         curses.panel.update_panels()
         curses.doupdate()
-        time.sleep(duration_sec)
+        
+        start = time.time()
+        def is_timed_out(now):
+            if duration_sec == 0 or duration_sec == None:
+                return(False)
+            if now - start >= duration_sec:
+                return(True)
+            return(False)
+
+        while not is_timed_out(time.time()):
+            key = self.base_window.getch()  # user hit any key to exit
+            if key != -1:
+                break
         
         self.panels['flash_message'].hide()
+        curses.panel.update_panels()
+        curses.doupdate()
+
+    def modal_message(self, output, callback, timeout_sec=None, flash_screen=True):
+        self.modal_window_has_focus = True
+        if flash_screen:
+            curses.flash()
+
+        self.panels['modal_window'].clear()
+        self.panels['modal_window'].show()
+        self.panels['modal_window'].set_focus()
+        curses.panel.update_panels()
+        curses.doupdate()
+
+        if not isinstance(output, list): output = [output]
+        for i, line in enumerate(output):
+            self.panels['modal_window'].print_line(line, 1, i+1, end='')
+        self.panels['modal_window'].print_footer()
+
+        start = time.time()
+        def is_timed_out(now):
+            if timeout_sec == 0 or timeout_sec == None:
+                return(False)
+            if now - start >= timeout_sec:
+                return(True)
+            return(False)
+
+        is_done = False
+        self.base_window.nodelay(False) # we want getch to block
+        while not is_timed_out(time.time()) or not is_done:
+            curses.panel.update_panels()
+            curses.doupdate()
+
+            key = self.base_window.getch()
+            if key != -1:
+                if key in self.forward_keys_in_modal:
+                    self.base_window.ungetch(key)
+                    break
+                elif key == ESC:
+                    break
+                else:
+                    is_done, updated_output = callback(key, output)
+                    self.panels['modal_window'].clear()
+                    for i, line in enumerate(updated_output):
+                        self.panels['modal_window'].print_line(line, 2, i+1, end='')
+                    self.panels['modal_window'].print_footer()
+
+        self.base_window.nodelay(True) # getch back to non-blocking
+        self.panels['modal_window'].hide()
+        self.modal_window_has_focus = False
 
     def new_center_window(self, rows, columns, name, 
                                 output=None, set_focus=True, 
@@ -477,10 +553,12 @@ class Ui(object):
         
         try:
             while not self.shutdown:
-                # all input related handlers should go here
-                self._handle_keystokes()
+                if not self.modal_window_has_focus:
+                    # all input related handlers should go here
+                    self._handle_keystokes()
         finally:
             self._stop_display = True
+            time.sleep(1)
             self._async_display_thread.join()
 
     def run(self):
@@ -488,7 +566,7 @@ class Ui(object):
             self.spin()
 
     def spin(self):
-        if not self.is_piped:
+        if not self.is_piped or not self.modal_window_has_focus:
             self.message_bar.set_focus()
 
         start = time.time()
@@ -503,7 +581,7 @@ class Ui(object):
         curses.panel.update_panels()
         curses.doupdate()
         stop = time.time()
-        if not self.running_async:
+        if not self.running_async and not self.modal_window_has_focus:
             self._handle_keystokes(remaining_time=abs(self.refresh_rate - (stop - start)))
 
     def log(self, output, end='\n'):
